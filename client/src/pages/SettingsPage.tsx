@@ -405,15 +405,16 @@ export default function SettingsPage() {
       {/* Apple Watch */}
       <Section title="Apple Watch" icon={<Watch size={16} className="text-brown-light" />} collapsible>
         <p className="text-xs text-brown-light mb-3">
-          Sync exercise data from your Apple Watch using the Health Auto Export app.
+          Sync exercise data from your Apple Watch using the <span className="font-semibold">Health Auto Export</span> app (free on the App Store).
         </p>
         <div className="bg-cream rounded-xl p-3 space-y-2">
           <p className="text-xs font-bold text-brown">Setup Instructions</p>
           <ol className="text-[11px] text-brown-light space-y-1 list-decimal list-inside">
-            <li>Install "Health Auto Export" from the App Store</li>
-            <li>Open the app and go to Automations</li>
-            <li>Create a new automation for Workouts</li>
-            <li>Set the API URL to:</li>
+            <li>Install <span className="font-semibold">"Health Auto Export"</span> from the App Store</li>
+            <li>Open the app &rarr; <span className="font-semibold">Automations</span> tab</li>
+            <li>Create a new automation for <span className="font-semibold">Workouts</span></li>
+            <li>Set method to <span className="font-semibold text-brown">POST</span></li>
+            <li>Paste this URL:</li>
           </ol>
           <div className="flex items-center gap-1">
             <code className="flex-1 text-[10px] bg-white p-2 rounded-lg text-brown break-all">{webhookUrl}</code>
@@ -421,9 +422,13 @@ export default function SettingsPage() {
               {copied ? <Check size={14} className="text-sage" /> : <Copy size={14} className="text-brown-light" />}
             </button>
           </div>
-          <ol start={5} className="text-[11px] text-brown-light space-y-1 list-decimal list-inside">
-            <li>Set format to JSON and enable auto-sync</li>
+          <ol start={6} className="text-[11px] text-brown-light space-y-1 list-decimal list-inside">
+            <li>Set format to <span className="font-semibold text-brown">JSON</span></li>
+            <li>Enable <span className="font-semibold">auto-sync</span></li>
           </ol>
+          <p className="text-[10px] text-brown-light/70 mt-1 italic">
+            Workouts will appear automatically in the Exercise tab after syncing.
+          </p>
         </div>
       </Section>
 
