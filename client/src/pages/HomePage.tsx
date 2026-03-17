@@ -45,7 +45,7 @@ function ProfileChip({ profile, active, onClick }: { profile: Profile; active: b
   );
 }
 
-function TogetherScene({ profiles }: { profiles: Profile[] }) {
+function TogetherScene({ profiles, equippedMap }: { profiles: Profile[]; equippedMap: Record<string, Record<string, string>> }) {
   const mood1 = profiles[0]?.mood || 'content';
   const mood2 = profiles[1]?.mood || 'content';
 
@@ -64,14 +64,14 @@ function TogetherScene({ profiles }: { profiles: Profile[] }) {
           animate={{ x: [0, 3, 0] }}
           transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
         >
-          <PetSVG type={profiles[0].pet_type} mood={mood1} size={130} />
+          <PetSVG type={profiles[0].pet_type} mood={mood1} size={130} equipped={equippedMap[profiles[0].id] || {}} />
         </motion.div>
         {profiles[1] && (
           <motion.div
             animate={{ x: [0, -3, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
           >
-            <PetSVG type={profiles[1].pet_type} mood={mood2} size={130} />
+            <PetSVG type={profiles[1].pet_type} mood={mood2} size={130} equipped={equippedMap[profiles[1].id] || {}} />
           </motion.div>
         )}
       </div>
@@ -104,20 +104,23 @@ export default function HomePage() {
   }, [petPet]);
 
   const [wardrobeOpen, setWardrobeOpen] = useState(false);
-  const [equipped, setEquipped] = useState<Record<string, string>>({});
+  const [equippedMap, setEquippedMap] = useState<Record<string, Record<string, string>>>({});
   const seasonTheme = useMemo(() => getSeasonTheme(), []);
 
   useEffect(() => {
-    if (activeProfileId) {
-      api.getEquipped(activeProfileId).then(setEquipped);
-    }
-  }, [activeProfileId]);
+    // Load equipped for all profiles
+    profiles.forEach(p => {
+      api.getEquipped(p.id).then(eq => setEquippedMap(prev => ({ ...prev, [p.id]: eq })));
+    });
+  }, [profiles]);
+
+  const equipped = activeProfileId ? equippedMap[activeProfileId] || {} : {};
 
   // Refresh equipped when wardrobe closes
   const handleWardrobeClose = useCallback(() => {
     setWardrobeOpen(false);
     if (activeProfileId) {
-      api.getEquipped(activeProfileId).then(setEquipped);
+      api.getEquipped(activeProfileId).then(eq => setEquippedMap(prev => ({ ...prev, [activeProfileId]: eq })));
     }
   }, [activeProfileId]);
 
@@ -154,7 +157,7 @@ export default function HomePage() {
       {/* Together Scene or Single Pet */}
       <div className="flex-1 flex flex-col items-center justify-center">
         {profiles.length > 1 ? (
-          <TogetherScene profiles={profiles} />
+          <TogetherScene profiles={profiles} equippedMap={equippedMap} />
         ) : (
           <div className="text-center" onClick={handlePet}>
             <PetSVG type={activeProfile.pet_type} mood={activeProfile.mood} size={200} reaction={petReaction?.type || null} equipped={equipped} />
