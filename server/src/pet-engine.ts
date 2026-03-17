@@ -137,6 +137,60 @@ export function applyPetting(stats: PetStats): PetStats {
   };
 }
 
+// ─── XP / Leveling ───
+
+export function calculateLevel(xp: number): number {
+  return Math.floor(Math.sqrt(xp / 50)) + 1;
+}
+
+export function xpForLevel(level: number): number {
+  return (level - 1) * (level - 1) * 50;
+}
+
+export function xpToNextLevel(xp: number): { current: number; needed: number; progress: number } {
+  const level = calculateLevel(xp);
+  const currentLevelXp = xpForLevel(level);
+  const nextLevelXp = xpForLevel(level + 1);
+  const needed = nextLevelXp - currentLevelXp;
+  const current = xp - currentLevelXp;
+  return { current, needed, progress: needed > 0 ? current / needed : 1 };
+}
+
+export interface XpGain {
+  xp_gained: number;
+  reason: string;
+}
+
+export function calculateFoodXp(calories: number, protein: number, carbs: number, fat: number, fiber: number, isFirstToday: boolean): XpGain[] {
+  const gains: XpGain[] = [];
+  gains.push({ xp_gained: 10, reason: 'Logged food' });
+  if (protein > 0 && carbs > 0 && fat > 0 && fiber > 0) {
+    gains.push({ xp_gained: 5, reason: 'Complete macros' });
+  }
+  if (isFirstToday) {
+    gains.push({ xp_gained: 20, reason: 'First log today' });
+  }
+  return gains;
+}
+
+export function calculateExerciseXp(intensity: string, isFirstToday: boolean): XpGain[] {
+  const gains: XpGain[] = [];
+  let base = 15;
+  if (intensity === 'intense') base += 5;
+  else if (intensity === 'moderate') base += 3;
+  gains.push({ xp_gained: base, reason: 'Logged exercise' });
+  if (isFirstToday) {
+    gains.push({ xp_gained: 20, reason: 'First log today' });
+  }
+  return gains;
+}
+
+export function calculateStreakXp(streak: number): XpGain[] {
+  if (streak <= 0) return [];
+  const xp = Math.min(streak * 5, 50);
+  return [{ xp_gained: xp, reason: `${streak}-day streak bonus` }];
+}
+
 export function deriveMood(stats: PetStats): PetMood {
   const hour = new Date().getHours();
   if (hour >= 23 || hour < 7) return 'sleeping';

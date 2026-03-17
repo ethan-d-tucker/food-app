@@ -13,6 +13,8 @@ export const api = {
   // Profiles
   getProfiles: () => request<any[]>('/profiles'),
   createProfile: (data: any) => request<any>('/profiles', { method: 'POST', body: JSON.stringify(data) }),
+  updateProfile: (profileId: string, data: any) =>
+    request<any>(`/profiles/${profileId}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Pet
   petPet: (profileId: string) => request<any>(`/profiles/${profileId}/pet`, { method: 'POST' }),
@@ -39,6 +41,39 @@ export const api = {
   getSettings: (profileId: string) => request<any>(`/profiles/${profileId}/settings`),
   updateSettings: (profileId: string, data: any) =>
     request<any>(`/profiles/${profileId}/settings`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Calendar / History
+  getCalendar: (profileId: string, month: string) =>
+    request<any[]>(`/profiles/${profileId}/calendar?month=${month}`),
+  getWeekSummary: (profileId: string, weekStart: string) =>
+    request<any>(`/profiles/${profileId}/weekly-summary?week_start=${weekStart}`),
+  getStreaks: (profileId: string) =>
+    request<any>(`/profiles/${profileId}/streaks`),
+
+  // Progression
+  getProgression: (profileId: string) => request<any>(`/profiles/${profileId}/progression`),
+  useTreat: (profileId: string) => request<any>(`/profiles/${profileId}/treat`, { method: 'POST' }),
+  getAchievements: (profileId: string) => request<any[]>(`/profiles/${profileId}/achievements`),
+
+  // Accessories
+  getAccessories: (profileId: string) => request<any[]>(`/profiles/${profileId}/accessories`),
+  getEquipped: (profileId: string) => request<any>(`/profiles/${profileId}/accessories/equipped`),
+  equipAccessory: (profileId: string, category: string, accessoryKey: string | null) =>
+    request<any>(`/profiles/${profileId}/accessories/equip`, { method: 'PUT', body: JSON.stringify({ category, accessory_key: accessoryKey }) }),
+
+  // Checklists
+  getChecklist: (profileId: string, date?: string) =>
+    request<any[]>(`/profiles/${profileId}/checklist${date ? `?date=${date}` : ''}`),
+  addChecklistItem: (profileId: string, data: any) =>
+    request<any>(`/profiles/${profileId}/checklist`, { method: 'POST', body: JSON.stringify(data) }),
+  updateChecklistItem: (id: string, data: any) =>
+    request<any>(`/checklist/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteChecklistItem: (id: string) =>
+    request<any>(`/checklist/${id}`, { method: 'DELETE' }),
+  completeChecklistItem: (id: string, date?: string) =>
+    request<any>(`/checklist/${id}/complete${date ? `?date=${date}` : ''}`, { method: 'POST' }),
+  uncompleteChecklistItem: (id: string, date?: string) =>
+    request<any>(`/checklist/${id}/complete${date ? `?date=${date}` : ''}`, { method: 'DELETE' }),
 
   // Food search (Open Food Facts)
   searchFood: (query: string) => request<any[]>(`/food-search?q=${encodeURIComponent(query)}`),

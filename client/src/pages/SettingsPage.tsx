@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore, type Settings } from '../stores/appStore';
 import PetSVG from '../components/pet/PetSVG';
-import { UserPlus, Bell, BellOff, Shield, ChevronDown, ChevronUp, Watch, Send, Copy, Check } from 'lucide-react';
+import PetTypePicker from '../components/PetTypePicker';
+import ColorPicker from '../components/ColorPicker';
+import type { PetType } from '../components/PetTypePicker';
+import { UserPlus, Bell, BellOff, Shield, ChevronDown, ChevronUp, Watch, Send, Copy, Check, Pencil } from 'lucide-react';
 
 function ToggleSwitch({ on, onChange, color = 'bg-terracotta' }: { on: boolean; onChange: (v: boolean) => void; color?: string }) {
   return (
@@ -53,10 +56,15 @@ function NumberInput({ label, value, onChange, min = 0, max = 9999, suffix }: { 
 }
 
 export default function SettingsPage() {
-  const { profiles, activeProfileId, setPage, settings, loadSettings, updateSettings } = useAppStore();
+  const { profiles, activeProfileId, setPage, settings, loadSettings, updateSettings, updateProfile } = useAppStore();
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
   const [local, setLocal] = useState<Partial<Settings>>({});
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPetName, setEditPetName] = useState('');
+  const [editPetType, setEditPetType] = useState<PetType>('red-panda');
+  const [editColor, setEditColor] = useState('#E07A5F');
 
   useEffect(() => {
     loadSettings();
@@ -66,9 +74,28 @@ export default function SettingsPage() {
     if (settings) setLocal(settings);
   }, [settings]);
 
+  useEffect(() => {
+    if (activeProfile) {
+      setEditName(activeProfile.name);
+      setEditPetName(activeProfile.pet_name);
+      setEditPetType(activeProfile.pet_type);
+      setEditColor(activeProfile.avatar_color);
+    }
+  }, [activeProfile, editing]);
+
   const save = async (updates: Partial<Settings>) => {
     setLocal((prev) => ({ ...prev, ...updates }));
     await updateSettings(updates);
+  };
+
+  const saveProfile = async () => {
+    await updateProfile({
+      name: editName.trim(),
+      pet_name: editPetName.trim(),
+      pet_type: editPetType,
+      avatar_color: editColor,
+    });
+    setEditing(false);
   };
 
   const s = { ...settings, ...local } as Settings;
@@ -100,7 +127,53 @@ export default function SettingsPage() {
             </p>
           </div>
           <PetSVG type={activeProfile.pet_type} mood="happy" size={50} />
+          <button onClick={() => setEditing(!editing)} className="p-2 rounded-xl hover:bg-cream btn-press transition-colors">
+            <Pencil size={16} className={editing ? 'text-terracotta' : 'text-brown-light'} />
+          </button>
         </div>
+
+        {editing && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mt-4 space-y-4 border-t border-cream-dark pt-4"
+          >
+            <div>
+              <label className="text-xs font-medium text-brown-light block mb-1">Your Name</label>
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-cream border-2 border-cream-dark focus:border-terracotta outline-none text-brown text-sm font-medium"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-brown-light block mb-1">Pet Name</label>
+              <input
+                type="text"
+                value={editPetName}
+                onChange={(e) => setEditPetName(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-cream border-2 border-cream-dark focus:border-terracotta outline-none text-brown text-sm font-medium"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-brown-light block mb-2">Your Color</label>
+              <ColorPicker value={editColor} onChange={setEditColor} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-brown-light block mb-2">Pet Type</label>
+              <PetTypePicker value={editPetType} onChange={setEditPetType} size={70} />
+            </div>
+            <button
+              onClick={saveProfile}
+              disabled={!editName.trim() || !editPetName.trim()}
+              className="w-full py-2.5 rounded-xl bg-terracotta text-white font-heading font-bold text-sm btn-press disabled:opacity-40 transition-opacity"
+            >
+              Save Changes
+            </button>
+          </motion.div>
+        )}
       </div>
 
       {/* Goals */}

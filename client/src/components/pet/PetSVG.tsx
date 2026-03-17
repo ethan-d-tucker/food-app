@@ -5,6 +5,8 @@ interface PetProps {
   mood: string;
   size?: number;
   onClick?: () => void;
+  reaction?: string | null; // 'food' | 'exercise' | 'treat' | 'level_up' | null
+  accessories?: { hat?: string; glasses?: string };
 }
 
 const moodToExpression = (mood: string) => {
@@ -329,7 +331,100 @@ function SleepEffect() {
   );
 }
 
-export default function PetSVG({ type, mood, size = 200, onClick }: PetProps) {
+function FoodReactionEffect() {
+  return (
+    <g>
+      {/* Crumbs */}
+      {[0, 1, 2, 3].map((i) => (
+        <motion.circle
+          key={i}
+          cx={90 + i * 8}
+          cy={100}
+          r={2}
+          fill="#F2CC8F"
+          initial={{ opacity: 1, y: 0 }}
+          animate={{ opacity: 0, y: 15 + i * 5, x: (i % 2 ? 6 : -6) }}
+          transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+        />
+      ))}
+      {/* Chewing motion on mouth area */}
+      <motion.ellipse
+        cx={100} cy={95} rx={6} ry={3}
+        fill="#3D405B"
+        animate={{ ry: [3, 5, 3], rx: [6, 7, 6] }}
+        transition={{ duration: 0.3, repeat: Infinity }}
+      />
+    </g>
+  );
+}
+
+function ExerciseReactionEffect() {
+  return (
+    <g>
+      {/* Sweat drops */}
+      <motion.ellipse cx={68} cy={65} rx={2} ry={3} fill="#A8D5BA"
+        animate={{ y: [0, 10], opacity: [0.8, 0] }} transition={{ duration: 0.8, repeat: Infinity }} />
+      <motion.ellipse cx={135} cy={62} rx={2} ry={3} fill="#A8D5BA"
+        animate={{ y: [0, 12], opacity: [0.8, 0] }} transition={{ duration: 0.8, repeat: Infinity, delay: 0.3 }} />
+      {/* Speed lines */}
+      <motion.line x1={45} y1={90} x2={55} y2={90} stroke="#E07A5F" strokeWidth="1.5" opacity={0.4}
+        animate={{ opacity: [0, 0.5, 0] }} transition={{ duration: 0.4, repeat: Infinity }} />
+      <motion.line x1={145} y1={95} x2={155} y2={95} stroke="#E07A5F" strokeWidth="1.5" opacity={0.4}
+        animate={{ opacity: [0, 0.5, 0] }} transition={{ duration: 0.4, repeat: Infinity, delay: 0.2 }} />
+    </g>
+  );
+}
+
+function TreatReactionEffect() {
+  return (
+    <g>
+      {/* Floating hearts */}
+      {[0, 1, 2].map((i) => (
+        <motion.text
+          key={i}
+          x={85 + i * 15}
+          y={55}
+          fontSize="12"
+          fill="#E07A5F"
+          initial={{ opacity: 1, y: 0 }}
+          animate={{ opacity: 0, y: -20 }}
+          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.4 }}
+        >
+          ♥
+        </motion.text>
+      ))}
+    </g>
+  );
+}
+
+function LevelUpEffect() {
+  return (
+    <g>
+      {/* Golden glow ring */}
+      <motion.circle cx={100} cy={100} r={60} fill="none" stroke="#F2CC8F" strokeWidth="2"
+        initial={{ r: 40, opacity: 0.8 }}
+        animate={{ r: 80, opacity: 0 }}
+        transition={{ duration: 1.5, repeat: Infinity }}
+      />
+      {/* Stars */}
+      {[0, 1, 2, 3, 4].map((i) => (
+        <motion.text
+          key={i}
+          x={100 + Math.cos(i * 72 * Math.PI / 180) * 50}
+          y={80 + Math.sin(i * 72 * Math.PI / 180) * 50}
+          fontSize="10"
+          fill="#F2CC8F"
+          animate={{ opacity: [0, 1, 0], scale: [0.5, 1.2, 0.5] }}
+          transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+        >
+          ★
+        </motion.text>
+      ))}
+    </g>
+  );
+}
+
+export default function PetSVG({ type, mood, size = 200, onClick, reaction, accessories: _accessories }: PetProps) {
   const expr = moodToExpression(mood);
 
   const BodyComponent = {
@@ -346,20 +441,35 @@ export default function PetSVG({ type, mood, size = 200, onClick }: PetProps) {
       height={size * 0.8}
       onClick={onClick}
       className="cursor-pointer select-none"
-      animate={expr.bouncy
-        ? { y: [0, -6, 0] }
-        : { scale: [1, 1.02, 1] }}
-      transition={expr.bouncy
-        ? { duration: 0.5, repeat: Infinity, ease: 'easeInOut' }
-        : { duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+      animate={
+        reaction === 'exercise'
+          ? { y: [0, -8, 0] }
+          : reaction === 'level_up'
+          ? { scale: [1, 1.08, 1], y: [0, -4, 0] }
+          : expr.bouncy
+          ? { y: [0, -6, 0] }
+          : { scale: [1, 1.02, 1] }
+      }
+      transition={
+        reaction === 'exercise'
+          ? { duration: 0.25, repeat: Infinity, ease: 'easeInOut' }
+          : reaction === 'level_up'
+          ? { duration: 0.6, repeat: Infinity, ease: 'easeInOut' }
+          : expr.bouncy
+          ? { duration: 0.5, repeat: Infinity, ease: 'easeInOut' }
+          : { duration: 3, repeat: Infinity, ease: 'easeInOut' }
+      }
       whileTap={{ scale: 0.92 }}
     >
+      {reaction === 'level_up' && <LevelUpEffect />}
       <BodyComponent mood={mood} />
-      <Eyes type={type} expression={expr.eyes} />
-      <Mouth expression={expr.mouth} />
-      <Blush show={expr.blush} />
-      {mood === 'sick' && <SickEffect />}
-      {mood === 'sleeping' && <SleepEffect />}
+      <Eyes type={type} expression={reaction === 'treat' ? 'sparkle' : expr.eyes} />
+      {reaction === 'food' ? <FoodReactionEffect /> : <Mouth expression={expr.mouth} />}
+      <Blush show={expr.blush || reaction === 'treat'} />
+      {mood === 'sick' && !reaction && <SickEffect />}
+      {mood === 'sleeping' && !reaction && <SleepEffect />}
+      {reaction === 'exercise' && <ExerciseReactionEffect />}
+      {reaction === 'treat' && <TreatReactionEffect />}
     </motion.svg>
   );
 }

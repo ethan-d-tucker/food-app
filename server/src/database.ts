@@ -90,6 +90,55 @@ db.exec(`
     bypass_date TEXT NOT NULL,
     PRIMARY KEY (profile_id, bypass_date)
   );
+
+  CREATE TABLE IF NOT EXISTS streaks (
+    profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+    current_streak INTEGER NOT NULL DEFAULT 0,
+    longest_streak INTEGER NOT NULL DEFAULT 0,
+    last_logged_date TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS pet_progression (
+    profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+    xp INTEGER NOT NULL DEFAULT 0,
+    level INTEGER NOT NULL DEFAULT 1,
+    treats INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS achievements (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    achievement_key TEXT NOT NULL,
+    unlocked_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(profile_id, achievement_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS pet_equipped (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    accessory_key TEXT NOT NULL,
+    PRIMARY KEY (profile_id, category)
+  );
+
+  CREATE TABLE IF NOT EXISTS checklist_items (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT 'check',
+    recurrence TEXT NOT NULL DEFAULT 'once' CHECK(recurrence IN ('once', 'daily', 'weekly')),
+    recurrence_days TEXT NOT NULL DEFAULT '',
+    scheduled_date TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS checklist_completions (
+    id TEXT PRIMARY KEY,
+    item_id TEXT NOT NULL REFERENCES checklist_items(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    completed_date TEXT NOT NULL,
+    UNIQUE(item_id, completed_date)
+  );
 `);
 
 // Migrate existing profiles that don't have settings rows

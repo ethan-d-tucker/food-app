@@ -78,7 +78,29 @@ const dialogue: Record<string, string[]> = {
     "So nice~",
     "More please!",
   ],
+  treat_reaction: [
+    "A treat?! For me?!",
+    "Yay, my favorite!",
+    "Nom nom nom!",
+    "You spoil me!",
+    "Best treat ever!",
+  ],
 };
+
+const seasonalDialogue: Record<string, string[]> = {
+  spring: ["The flowers are so pretty!", "Spring vibes!", "Everything's blooming!"],
+  summer: ["It's so warm!", "Perfect day to be outside!", "Summer energy!"],
+  fall: ["The leaves are so colorful!", "Cozy season!", "I love sweater weather!"],
+  winter: ["Brr, it's chilly!", "Stay warm out there!", "Hot cocoa weather!"],
+};
+
+function getSeason(): string {
+  const month = new Date().getMonth();
+  if (month >= 2 && month <= 4) return 'spring';
+  if (month >= 5 && month <= 7) return 'summer';
+  if (month >= 8 && month <= 10) return 'fall';
+  return 'winter';
+}
 
 function pickRandom(arr: string[]) {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -86,12 +108,14 @@ function pickRandom(arr: string[]) {
 
 interface SpeechBubbleProps {
   mood: string;
-  reaction?: { type: 'food' | 'exercise' | 'pet'; mood: string } | null;
+  reaction?: { type: 'food' | 'exercise' | 'pet' | 'treat'; mood: string } | null;
 }
 
 export default function SpeechBubble({ mood, reaction }: SpeechBubbleProps) {
   const text = reaction
     ? pickRandom(dialogue[`${reaction.type}_reaction`] || dialogue.content)
+    : Math.random() < 0.15
+    ? pickRandom(seasonalDialogue[getSeason()])
     : pickRandom(dialogue[mood] || dialogue.content);
 
   return (

@@ -3,6 +3,11 @@ import { motion } from 'framer-motion';
 import { useAppStore, type Profile } from '../stores/appStore';
 import PetSVG from '../components/pet/PetSVG';
 import SpeechBubble from '../components/pet/SpeechBubble';
+import LevelUpOverlay from '../components/pet/LevelUpOverlay';
+import WardrobeModal from '../components/WardrobeModal';
+import { Flame, Cookie, Star, Shirt } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { getSeasonTheme } from '../lib/themes';
 
 function StatBar({ label, value, color }: { label: string; value: number; color: string }) {
   return (
@@ -77,12 +82,14 @@ function TogetherScene({ profiles }: { profiles: Profile[] }) {
 }
 
 export default function HomePage() {
-  const { profiles, activeProfileId, setActiveProfile, petPet, petReaction, clearReaction, loadSummary, summary } = useAppStore();
+  const { profiles, activeProfileId, setActiveProfile, petPet, petReaction, clearReaction, loadSummary, summary, progression, loadProgression, loadStreaks, streaks, useTreat, levelUpTriggered, clearLevelUp } = useAppStore();
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
 
   useEffect(() => {
     loadSummary();
-  }, [activeProfileId, loadSummary]);
+    loadProgression();
+    loadStreaks();
+  }, [activeProfileId, loadSummary, loadProgression, loadStreaks]);
 
   useEffect(() => {
     if (petReaction) {
@@ -95,12 +102,30 @@ export default function HomePage() {
     petPet();
   }, [petPet]);
 
+  const [wardrobeOpen, setWardrobeOpen] = useState(false);
+  const seasonTheme = useMemo(() => getSeasonTheme(), []);
+
   if (!activeProfile) return null;
 
   const stats = activeProfile.pet_stats;
 
   return (
-    <div className="flex-1 flex flex-col px-4 pt-4 pb-24">
+    <div className="flex-1 flex flex-col px-4 pt-4 pb-24 relative overflow-hidden">
+      {/* Floating Seasonal Particles */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {seasonTheme.particles.map((p, i) => (
+          <motion.span
+            key={i}
+            className="absolute text-lg opacity-20"
+            style={{ left: `${15 + i * 30}%`, top: -20 }}
+            animate={{ y: [0, 400], x: [0, (i % 2 ? 20 : -20)], rotate: [0, 360] }}
+            transition={{ duration: 8 + i * 2, repeat: Infinity, delay: i * 3, ease: 'linear' }}
+          >
+            {p}
+          </motion.span>
+        ))}
+      </div>
+
       {/* Profile Switcher */}
       {profiles.length > 1 && (
         <div className="flex justify-center gap-2 mb-4 bg-cream-dark/50 rounded-full p-1 mx-auto">
@@ -116,7 +141,7 @@ export default function HomePage() {
           <TogetherScene profiles={profiles} />
         ) : (
           <div className="text-center" onClick={handlePet}>
-            <PetSVG type={activeProfile.pet_type} mood={activeProfile.mood} size={200} />
+            <PetSVG type={activeProfile.pet_type} mood={activeProfile.mood} size={200} reaction={petReaction?.type || null} />
           </div>
         )}
 
@@ -125,10 +150,19 @@ export default function HomePage() {
           <SpeechBubble mood={activeProfile.mood} reaction={petReaction} />
         </div>
 
-        {/* Pet Name */}
-        <p className="font-heading font-bold text-lg text-brown mt-2">
-          {activeProfile.pet_name}
-        </p>
+        {/* Pet Name + Wardrobe */}
+        <div className="flex items-center gap-2 mt-2">
+          <p className="font-heading font-bold text-lg text-brown">
+            {activeProfile.pet_name}
+          </p>
+          <button
+            onClick={() => setWardrobeOpen(true)}
+            className="p-1.5 rounded-lg hover:bg-cream-dark btn-press"
+            title="Wardrobe"
+          >
+            <Shirt size={14} className="text-brown-light" />
+          </button>
+        </div>
 
         {/* Tap hint for single pet */}
         {profiles.length === 1 && (
@@ -153,6 +187,59 @@ export default function HomePage() {
           <StatBar label="Fullness" value={stats.fullness} color="#E07A5F" />
           <StatBar label="Fitness" value={stats.fitness} color="#81B29A" />
           <StatBar label="Happy" value={stats.happiness} color="#F2CC8F" />
+        </motion.div>
+      )}
+
+      {/* Level / XP / Streak / Treats */}
+      {progression && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="bg-white rounded-2xl p-4 shadow-sm mt-3"
+        >
+          {/* Level + XP bar */}
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-full bg-terracotta/15 flex items-center justify-center">
+              <Star size={18} className="text-terracotta" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-bold text-brown">Level {progression.level}</span>
+                <span className="text-[10px] text-brown-light">{progression.current}/{progression.needed} XP</span>
+              </div>
+              <div className="h-2 bg-cream-dark rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full rounded-full bg-terracotta"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progression.progress * 100}%` }}
+                  transition={{ type: 'spring', stiffness: 100, damping: 15 }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Streak + Treats row */}
+          <div className="flex gap-3">
+            <div className="flex-1 flex items-center gap-2 bg-cream rounded-xl px-3 py-2">
+              <Flame size={16} className="text-terracotta" />
+              <div>
+                <p className="text-sm font-bold text-brown">{streaks?.current_streak || 0}</p>
+                <p className="text-[9px] text-brown-light">streak</p>
+              </div>
+            </div>
+            <button
+              onClick={() => progression.treats > 0 && useTreat()}
+              disabled={progression.treats <= 0}
+              className="flex-1 flex items-center gap-2 bg-cream rounded-xl px-3 py-2 btn-press disabled:opacity-40 transition-opacity"
+            >
+              <Cookie size={16} className="text-mustard" />
+              <div className="text-left">
+                <p className="text-sm font-bold text-brown">{progression.treats}</p>
+                <p className="text-[9px] text-brown-light">treats</p>
+              </div>
+            </button>
+          </div>
         </motion.div>
       )}
 
@@ -186,6 +273,16 @@ export default function HomePage() {
           </div>
         </motion.div>
       )}
+
+      {/* Level Up Overlay */}
+      <LevelUpOverlay
+        level={progression?.level || 1}
+        visible={levelUpTriggered}
+        onDismiss={clearLevelUp}
+      />
+
+      {/* Wardrobe */}
+      <WardrobeModal open={wardrobeOpen} onClose={() => setWardrobeOpen(false)} />
     </div>
   );
 }

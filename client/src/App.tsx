@@ -1,17 +1,22 @@
 import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from './stores/appStore';
-import { Home, UtensilsCrossed, Dumbbell, Settings } from 'lucide-react';
+import { Home, UtensilsCrossed, Dumbbell, CalendarDays, ClipboardCheck, Settings } from 'lucide-react';
 import OnboardingPage from './pages/OnboardingPage';
 import HomePage from './pages/HomePage';
 import FoodPage from './pages/FoodPage';
 import ExercisePage from './pages/ExercisePage';
+import HistoryPage from './pages/HistoryPage';
+import ChecklistPage from './pages/ChecklistPage';
 import SettingsPage from './pages/SettingsPage';
+import AchievementToast from './components/AchievementToast';
 
 const tabs = [
   { id: 'home' as const, label: 'Pets', icon: Home },
   { id: 'food' as const, label: 'Food', icon: UtensilsCrossed },
   { id: 'exercise' as const, label: 'Exercise', icon: Dumbbell },
+  { id: 'history' as const, label: 'History', icon: CalendarDays },
+  { id: 'checklist' as const, label: 'Tasks', icon: ClipboardCheck },
   { id: 'settings' as const, label: 'Settings', icon: Settings },
 ];
 
@@ -85,10 +90,13 @@ export default function App() {
           {page === 'home' && <HomePage />}
           {page === 'food' && <FoodPage />}
           {page === 'exercise' && <ExercisePage />}
+          {page === 'history' && <HistoryPage />}
+          {page === 'checklist' && <ChecklistPage />}
           {page === 'settings' && <SettingsPage />}
         </motion.div>
       </AnimatePresence>
       {page !== 'onboarding' && <BottomNav />}
+      <AchievementToast />
     </>
   );
 }

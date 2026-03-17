@@ -73,7 +73,50 @@ interface DailySummary {
   goals: { calorie_goal: number; exercise_goal: number; tracking_mode: string };
 }
 
-type Page = 'home' | 'food' | 'exercise' | 'settings' | 'onboarding';
+export interface CalendarDay {
+  date: string;
+  has_food: boolean;
+  has_exercise: boolean;
+  food_count: number;
+  exercise_count: number;
+}
+
+export interface WeekSummary {
+  week_start: string;
+  week_end: string;
+  food: { total_meals: number; total_calories: number; total_protein: number; total_carbs: number; total_fat: number; total_fiber: number; days_with_food: number };
+  exercise: { total_exercises: number; total_minutes: number; total_burned: number; days_with_exercise: number };
+  days_logged: number;
+  avg_daily_calories: number;
+}
+
+export interface Streaks {
+  current_streak: number;
+  longest_streak: number;
+  last_logged_date: string | null;
+}
+
+export interface Progression {
+  xp: number;
+  level: number;
+  treats: number;
+  current: number;
+  needed: number;
+  progress: number;
+}
+
+export interface ChecklistItem {
+  id: string;
+  profile_id: string;
+  title: string;
+  icon: string;
+  recurrence: 'once' | 'daily' | 'weekly';
+  recurrence_days: string;
+  scheduled_date: string | null;
+  completed: boolean;
+}
+
+type Page = 'home' | 'food' | 'exercise' | 'history' | 'checklist' | 'settings' | 'onboarding';
 
 interface AppState {
   profiles: Profile[];
@@ -83,13 +126,22 @@ interface AppState {
   exerciseEntries: ExerciseEntry[];
   summary: DailySummary | null;
   settings: Settings | null;
+  calendarData: CalendarDay[];
+  weekSummary: WeekSummary | null;
+  streaks: Streaks | null;
+  progression: Progression | null;
+  levelUpTriggered: boolean;
+  achievements: any[];
+  newAchievement: any | null;
+  checklistItems: ChecklistItem[];
   loading: boolean;
-  petReaction: { type: 'food' | 'exercise' | 'pet'; mood: string } | null;
+  petReaction: { type: 'food' | 'exercise' | 'pet' | 'treat'; mood: string } | null;
 
   setPage: (page: Page) => void;
   setActiveProfile: (id: string) => void;
   loadProfiles: () => Promise<void>;
   createProfile: (data: any) => Promise<void>;
+  updateProfile: (data: any) => Promise<void>;
   petPet: () => Promise<void>;
   loadFood: (date?: string) => Promise<void>;
   addFood: (data: any) => Promise<void>;
@@ -98,6 +150,19 @@ interface AppState {
   addExercise: (data: any) => Promise<void>;
   deleteExercise: (id: string) => Promise<void>;
   loadSummary: (date?: string) => Promise<void>;
+  loadCalendar: (month: string) => Promise<void>;
+  loadWeekSummary: (weekStart: string) => Promise<void>;
+  loadStreaks: () => Promise<void>;
+  loadProgression: () => Promise<void>;
+  useTreat: () => Promise<void>;
+  clearLevelUp: () => void;
+  loadAchievements: () => Promise<void>;
+  clearNewAchievement: () => void;
+  loadChecklist: (date?: string) => Promise<void>;
+  addChecklistItem: (data: any) => Promise<void>;
+  deleteChecklistItem: (id: string) => Promise<void>;
+  completeChecklistItem: (id: string) => Promise<void>;
+  uncompleteChecklistItem: (id: string) => Promise<void>;
   loadSettings: () => Promise<void>;
   updateSettings: (data: Partial<Settings>) => Promise<void>;
   clearReaction: () => void;
@@ -111,6 +176,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   exerciseEntries: [],
   summary: null,
   settings: null,
+  calendarData: [],
+  weekSummary: null,
+  streaks: null,
+  progression: null,
+  levelUpTriggered: false,
+  achievements: [],
+  newAchievement: null,
+  checklistItems: [],
   loading: true,
   petReaction: null,
 
@@ -137,6 +210,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     const profiles = [...get().profiles, profile];
     set({ profiles, activeProfileId: profile.id, page: 'home' });
     localStorage.setItem('activeProfileId', profile.id);
+  },
+
+  updateProfile: async (data) => {
+    const { activeProfileId } = get();
+    if (!activeProfileId) return;
+    const updated = await api.updateProfile(activeProfileId, data);
+    set((state) => ({
+      profiles: state.profiles.map((p) =>
+        p.id === activeProfileId ? { ...updated } : p
+      ),
+    }));
   },
 
   petPet: async () => {
@@ -170,7 +254,11 @@ export const useAppStore = create<AppState>((set, get) => ({
           )
         : state.profiles,
       petReaction: result.pet_stats ? { type: 'food', mood: result.mood } : null,
+      progression: result.level ? { xp: result.xp, level: result.level, treats: result.treats, current: 0, needed: 0, progress: 0 } : state.progression,
+      levelUpTriggered: result.new_level || false,
+      newAchievement: result.new_achievements?.length > 0 ? result.new_achievements[0] : state.newAchievement,
     }));
+    if (result.level) get().loadProgression();
   },
 
   deleteFood: async (id) => {
@@ -197,7 +285,11 @@ export const useAppStore = create<AppState>((set, get) => ({
           )
         : state.profiles,
       petReaction: result.pet_stats ? { type: 'exercise', mood: result.mood } : null,
+      progression: result.level ? { xp: result.xp, level: result.level, treats: result.treats, current: 0, needed: 0, progress: 0 } : state.progression,
+      levelUpTriggered: result.new_level || false,
+      newAchievement: result.new_achievements?.length > 0 ? result.new_achievements[0] : state.newAchievement,
     }));
+    if (result.level) get().loadProgression();
   },
 
   deleteExercise: async (id) => {
@@ -210,6 +302,100 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!activeProfileId) return;
     const summary = await api.getSummary(activeProfileId, date);
     set({ summary });
+  },
+
+  loadCalendar: async (month) => {
+    const { activeProfileId } = get();
+    if (!activeProfileId) return;
+    const data = await api.getCalendar(activeProfileId, month);
+    set({ calendarData: data });
+  },
+
+  loadWeekSummary: async (weekStart) => {
+    const { activeProfileId } = get();
+    if (!activeProfileId) return;
+    const data = await api.getWeekSummary(activeProfileId, weekStart);
+    set({ weekSummary: data });
+  },
+
+  loadStreaks: async () => {
+    const { activeProfileId } = get();
+    if (!activeProfileId) return;
+    const data = await api.getStreaks(activeProfileId);
+    set({ streaks: data });
+  },
+
+  loadProgression: async () => {
+    const { activeProfileId } = get();
+    if (!activeProfileId) return;
+    const data = await api.getProgression(activeProfileId);
+    set({ progression: data });
+  },
+
+  useTreat: async () => {
+    const { activeProfileId } = get();
+    if (!activeProfileId) return;
+    const result = await api.useTreat(activeProfileId);
+    if (result.pet_stats) {
+      set((state) => ({
+        profiles: state.profiles.map((p) =>
+          p.id === activeProfileId ? { ...p, pet_stats: result.pet_stats, mood: result.mood } : p
+        ),
+        petReaction: { type: 'treat', mood: result.mood },
+        progression: state.progression ? { ...state.progression, treats: result.treats } : null,
+      }));
+    }
+  },
+
+  clearLevelUp: () => set({ levelUpTriggered: false }),
+
+  loadAchievements: async () => {
+    const { activeProfileId } = get();
+    if (!activeProfileId) return;
+    const data = await api.getAchievements(activeProfileId);
+    set({ achievements: data });
+  },
+
+  clearNewAchievement: () => set({ newAchievement: null }),
+
+  loadChecklist: async (date) => {
+    const { activeProfileId } = get();
+    if (!activeProfileId) return;
+    const items = await api.getChecklist(activeProfileId, date);
+    set({ checklistItems: items });
+  },
+
+  addChecklistItem: async (data) => {
+    const { activeProfileId } = get();
+    if (!activeProfileId) return;
+    await api.addChecklistItem(activeProfileId, data);
+    get().loadChecklist();
+  },
+
+  deleteChecklistItem: async (id) => {
+    await api.deleteChecklistItem(id);
+    set((state) => ({ checklistItems: state.checklistItems.filter(i => i.id !== id) }));
+  },
+
+  completeChecklistItem: async (id) => {
+    const { activeProfileId } = get();
+    if (!activeProfileId) return;
+    const result = await api.completeChecklistItem(id);
+    set((state) => ({
+      checklistItems: state.checklistItems.map(i => i.id === id ? { ...i, completed: true } : i),
+      profiles: result.pet_stats
+        ? state.profiles.map(p => p.id === activeProfileId ? { ...p, pet_stats: result.pet_stats, mood: result.mood } : p)
+        : state.profiles,
+      petReaction: result.pet_stats ? { type: 'food', mood: result.mood } : null,
+    }));
+    if (result.level) get().loadProgression();
+  },
+
+  uncompleteChecklistItem: async (id) => {
+    await api.uncompleteChecklistItem(id);
+    set((state) => ({
+      checklistItems: state.checklistItems.map(i => i.id === id ? { ...i, completed: false } : i),
+    }));
   },
 
   loadSettings: async () => {

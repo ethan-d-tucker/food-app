@@ -2,21 +2,15 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../stores/appStore';
 import PetSVG from '../components/pet/PetSVG';
-
-const PET_TYPES = [
-  { id: 'red-panda' as const, name: 'Red Panda', emoji: '🔴' },
-  { id: 'cat' as const, name: 'Cat', emoji: '🐱' },
-  { id: 'hamster' as const, name: 'Hamster', emoji: '🐹' },
-  { id: 'frog' as const, name: 'Frog', emoji: '🐸' },
-];
-
-const COLORS = ['#E07A5F', '#81B29A', '#F2CC8F', '#A8B5C8', '#C89EB8', '#7FBCD2'];
+import PetTypePicker from '../components/PetTypePicker';
+import ColorPicker, { COLORS } from '../components/ColorPicker';
+import type { PetType } from '../components/PetTypePicker';
 
 export default function OnboardingPage() {
   const { createProfile, profiles } = useAppStore();
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
-  const [petType, setPetType] = useState<typeof PET_TYPES[number]['id']>('red-panda');
+  const [petType, setPetType] = useState<PetType>('red-panda');
   const [petName, setPetName] = useState('');
   const [avatarColor, setAvatarColor] = useState(COLORS[0]);
   const [loading, setLoading] = useState(false);
@@ -77,19 +71,7 @@ export default function OnboardingPage() {
 
             <div className="mb-6">
               <label className="block text-sm font-medium text-brown-light mb-2 text-left">Pick your color</label>
-              <div className="flex gap-3 justify-center">
-                {COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setAvatarColor(c)}
-                    className="w-10 h-10 rounded-full btn-press transition-transform"
-                    style={{
-                      backgroundColor: c,
-                      boxShadow: avatarColor === c ? `0 0 0 3px ${c}40, 0 0 0 5px ${c}` : 'none',
-                    }}
-                  />
-                ))}
-              </div>
+              <ColorPicker value={avatarColor} onChange={setAvatarColor} />
             </div>
 
             <button
@@ -113,24 +95,8 @@ export default function OnboardingPage() {
             <h1 className="font-heading text-2xl font-bold text-brown mb-2">Choose Your Pet</h1>
             <p className="text-brown-light mb-6">They'll grow with you!</p>
 
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              {PET_TYPES.map((pet) => (
-                <motion.button
-                  key={pet.id}
-                  onClick={() => setPetType(pet.id)}
-                  whileTap={{ scale: 0.95 }}
-                  className={`p-4 rounded-2xl border-2 transition-all ${
-                    petType === pet.id
-                      ? 'border-terracotta bg-terracotta/10'
-                      : 'border-cream-dark bg-white'
-                  }`}
-                >
-                  <div className="flex justify-center mb-2">
-                    <PetSVG type={pet.id} mood="happy" size={100} />
-                  </div>
-                  <p className="font-heading font-bold text-brown">{pet.name}</p>
-                </motion.button>
-              ))}
+            <div className="mb-6">
+              <PetTypePicker value={petType} onChange={setPetType} />
             </div>
 
             <button
