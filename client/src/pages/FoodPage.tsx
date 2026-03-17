@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../stores/appStore';
-import { commonFoods, FoodItem } from '../data/foods';
+import { commonFoods, type FoodItem } from '../data/foods';
 import { Plus, Search, X, Trash2 } from 'lucide-react';
 
 function AddFoodModal({ onClose }: { onClose: () => void }) {

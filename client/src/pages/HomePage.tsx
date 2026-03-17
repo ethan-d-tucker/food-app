@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useAppStore, Profile } from '../stores/appStore';
+import { motion } from 'framer-motion';
+import { useAppStore, type Profile } from '../stores/appStore';
 import PetSVG from '../components/pet/PetSVG';
 import SpeechBubble from '../components/pet/SpeechBubble';
 

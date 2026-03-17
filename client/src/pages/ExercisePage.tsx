@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../stores/appStore';
-import { commonExercises, ExerciseItem } from '../data/exercises';
+import { commonExercises, type ExerciseItem } from '../data/exercises';
 import { Plus, Search, X, Trash2 } from 'lucide-react';
 
 function AddExerciseModal({ onClose }: { onClose: () => void }) {
