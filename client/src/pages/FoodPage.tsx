@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAppStore } from '../stores/appStore';
+import { useAppStore, type FoodEntry } from '../stores/appStore';
 import { commonFoods } from '../data/foods';
 import { api } from '../lib/api';
 import { useDebounce } from '../hooks/useDebounce';
 import BarcodeScanner from '../components/food/BarcodeScanner';
-import { Plus, Search, X, Trash2, ScanBarcode, Loader2 } from 'lucide-react';
+import { Plus, Search, X, Trash2, ScanBarcode, Loader2, Minus } from 'lucide-react';
 
 type FoodTab = 'quick' | 'search' | 'scan';
+type QuantityUnit = 'serving' | 'g' | 'oz' | 'ml';
 
 interface SearchFood {
   name: string;
@@ -19,6 +20,55 @@ interface SearchFood {
   barcode: string;
   image_url: string;
   serving_size: string;
+  serving_grams?: number | null;
+}
+
+
+function computeMultiplier(qty: number, unit: QuantityUnit, servingGrams: number | null): number {
+  if (unit === 'serving' || !servingGrams) return qty;
+  const grams = unit === 'oz' ? qty * 28.35 : qty; // g and ml both map 1:1
+  return grams / servingGrams;
+}
+
+function QuantityPicker({ quantity, unit, onQuantityChange, onUnitChange, servingGrams }: {
+  quantity: number; unit: QuantityUnit; onQuantityChange: (v: number) => void; onUnitChange: (u: QuantityUnit) => void; servingGrams: number | null;
+}) {
+  const units: QuantityUnit[] = servingGrams ? ['serving', 'g', 'oz', 'ml'] : ['serving'];
+  return (
+    <div className="flex items-center gap-2 bg-cream-dark rounded-xl p-2">
+      <button onClick={() => onQuantityChange(Math.max(0.25, quantity - (unit === 'serving' ? 0.25 : unit === 'g' || unit === 'ml' ? 10 : 0.5)))}
+        className="w-8 h-8 rounded-lg bg-white flex items-center justify-center btn-press">
+        <Minus size={14} className="text-brown" />
+      </button>
+      <input
+        type="number" value={quantity} step={unit === 'serving' ? 0.25 : unit === 'g' || unit === 'ml' ? 1 : 0.5}
+        onChange={(e) => { const v = parseFloat(e.target.value); if (v > 0) onQuantityChange(v); }}
+        className="w-16 text-center py-1 rounded-lg bg-white border-2 border-cream-dark focus:border-terracotta outline-none text-brown text-sm font-bold"
+      />
+      <button onClick={() => onQuantityChange(quantity + (unit === 'serving' ? 0.25 : unit === 'g' || unit === 'ml' ? 10 : 0.5))}
+        className="w-8 h-8 rounded-lg bg-white flex items-center justify-center btn-press">
+        <Plus size={14} className="text-brown" />
+      </button>
+      <div className="flex gap-1 ml-auto">
+        {units.map((u) => (
+          <button key={u} onClick={() => {
+            onUnitChange(u);
+            if (u !== unit) {
+              // Convert quantity to the new unit
+              if (u === 'serving') onQuantityChange(1);
+              else if (u === 'g') onQuantityChange(servingGrams || 100);
+              else if (u === 'oz') onQuantityChange(Math.round(((servingGrams || 100) / 28.35) * 10) / 10);
+              else if (u === 'ml') onQuantityChange(servingGrams || 100);
+            }
+          }}
+            className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors ${unit === u ? 'bg-terracotta text-white' : 'bg-white text-brown-light'}`}
+          >
+            {u}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function FoodCard({ food, selected, onClick }: { food: { name: string; calories: number; protein: number; carbs: number; fat: number }; selected: boolean; onClick: () => void }) {
@@ -42,6 +92,91 @@ function FoodCard({ food, selected, onClick }: { food: { name: string; calories:
   );
 }
 
+function EditFoodModal({ entry, onClose }: { entry: FoodEntry; onClose: () => void }) {
+  const { updateFood, loadSummary } = useAppStore();
+  const [quantity, setQuantity] = useState(entry.quantity);
+  const [unit, setUnit] = useState<QuantityUnit>((entry.quantity_unit || 'serving') as QuantityUnit);
+  const [saving, setSaving] = useState(false);
+
+  const multiplier = computeMultiplier(quantity, unit, entry.serving_grams);
+  const previewCals = Math.round(entry.calories * multiplier);
+  const previewProtein = Math.round(entry.protein * multiplier * 10) / 10;
+  const previewCarbs = Math.round(entry.carbs * multiplier * 10) / 10;
+  const previewFat = Math.round(entry.fat * multiplier * 10) / 10;
+
+  const handleSave = async () => {
+    setSaving(true);
+    await updateFood(entry.id, { quantity: multiplier, quantity_unit: unit });
+    await loadSummary();
+    onClose();
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/30 z-50 flex items-end justify-center"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className="bg-cream w-full max-w-[430px] rounded-t-3xl p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-heading text-xl font-bold text-brown">Edit Amount</h2>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-cream-dark btn-press">
+            <X size={20} className="text-brown-light" />
+          </button>
+        </div>
+
+        <div className="bg-white rounded-xl p-3 mb-4">
+          <p className="font-medium text-brown text-sm">{entry.name}</p>
+          <p className="text-xs text-brown-light capitalize mt-0.5">{entry.meal_type}</p>
+        </div>
+
+        <p className="text-xs font-medium text-brown-light mb-2">Amount</p>
+        <QuantityPicker
+          quantity={quantity} unit={unit}
+          onQuantityChange={setQuantity} onUnitChange={setUnit}
+          servingGrams={entry.serving_grams}
+        />
+
+        <div className="grid grid-cols-4 gap-2 text-center mt-4 bg-white rounded-xl p-3">
+          <div>
+            <p className="text-lg font-bold text-terracotta">{previewCals}</p>
+            <p className="text-[10px] text-brown-light">cal</p>
+          </div>
+          <div>
+            <p className="text-lg font-bold text-sage">{previewProtein}g</p>
+            <p className="text-[10px] text-brown-light">Protein</p>
+          </div>
+          <div>
+            <p className="text-lg font-bold text-mustard">{previewCarbs}g</p>
+            <p className="text-[10px] text-brown-light">Carbs</p>
+          </div>
+          <div>
+            <p className="text-lg font-bold text-brown-light">{previewFat}g</p>
+            <p className="text-[10px] text-brown-light">Fat</p>
+          </div>
+        </div>
+
+        <button
+          onClick={handleSave}
+          disabled={saving || multiplier <= 0}
+          className="w-full mt-4 py-3 rounded-2xl bg-terracotta text-white font-heading font-bold text-lg btn-press disabled:opacity-40 transition-opacity"
+        >
+          {saving ? 'Saving...' : 'Save Changes'}
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function AddFoodModal({ onClose }: { onClose: () => void }) {
   const { addFood } = useAppStore();
   const [tab, setTab] = useState<FoodTab>('quick');
@@ -49,30 +184,38 @@ function AddFoodModal({ onClose }: { onClose: () => void }) {
   const [apiSearch, setApiSearch] = useState('');
   const [apiResults, setApiResults] = useState<SearchFood[]>([]);
   const [apiLoading, setApiLoading] = useState(false);
-  const [selectedFood, setSelectedFood] = useState<{ name: string; calories: number; protein: number; carbs: number; fat: number; fiber: number } | null>(null);
+  const [selectedFood, setSelectedFood] = useState<SearchFood | { name: string; calories: number; protein: number; carbs: number; fat: number; fiber: number; serving_grams?: number | null } | null>(null);
   const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
   const [customMode, setCustomMode] = useState(false);
   const [custom, setCustom] = useState({ name: '', calories: '', protein: '', carbs: '', fat: '', fiber: '' });
   const [scanResult, setScanResult] = useState<SearchFood | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState('');
+  const [quantity, setQuantity] = useState(1);
+  const [quantityUnit, setQuantityUnit] = useState<QuantityUnit>('serving');
 
-  const debouncedApiSearch = useDebounce(apiSearch, 300);
+  const debouncedApiSearch = useDebounce(apiSearch, 400);
 
-  // API search effect
+  // API search effect with abort for stale requests
   useEffect(() => {
     if (!debouncedApiSearch.trim() || tab !== 'search') {
       setApiResults([]);
       return;
     }
+    const controller = new AbortController();
     setApiLoading(true);
-    api.searchFood(debouncedApiSearch).then((results) => {
-      setApiResults(results);
-      setApiLoading(false);
+    api.searchFood(debouncedApiSearch, controller.signal).then((results) => {
+      if (!controller.signal.aborted) {
+        setApiResults(results);
+        setApiLoading(false);
+      }
     }).catch(() => {
-      setApiResults([]);
-      setApiLoading(false);
+      if (!controller.signal.aborted) {
+        setApiResults([]);
+        setApiLoading(false);
+      }
     });
+    return () => controller.abort();
   }, [debouncedApiSearch, tab]);
 
   const filtered = quickSearch.trim()
@@ -92,6 +235,9 @@ function AddFoodModal({ onClose }: { onClose: () => void }) {
     setScanLoading(false);
   };
 
+  const servingGrams = (selectedFood && 'serving_grams' in selectedFood) ? selectedFood.serving_grams ?? null : null;
+  const multiplier = computeMultiplier(quantity, quantityUnit, servingGrams);
+
   const handleAdd = async () => {
     if (customMode) {
       if (!custom.name || !custom.calories) return;
@@ -103,6 +249,8 @@ function AddFoodModal({ onClose }: { onClose: () => void }) {
         fat: Number(custom.fat) || 0,
         fiber: Number(custom.fiber) || 0,
         meal_type: mealType,
+        quantity: multiplier,
+        quantity_unit: quantityUnit,
       });
     } else if (selectedFood) {
       await addFood({
@@ -113,9 +261,19 @@ function AddFoodModal({ onClose }: { onClose: () => void }) {
         fat: selectedFood.fat,
         fiber: selectedFood.fiber,
         meal_type: mealType,
+        quantity: multiplier,
+        quantity_unit: quantityUnit,
+        serving_grams: servingGrams,
       });
     }
     onClose();
+  };
+
+  // Reset quantity when food selection changes
+  const selectFood = (food: typeof selectedFood) => {
+    setSelectedFood(food);
+    setQuantity(1);
+    setQuantityUnit('serving');
   };
 
   return (
@@ -165,7 +323,7 @@ function AddFoodModal({ onClose }: { onClose: () => void }) {
           ]).map((t) => (
             <button
               key={t.id}
-              onClick={() => { setTab(t.id); setSelectedFood(null); setCustomMode(false); }}
+              onClick={() => { setTab(t.id); selectFood(null); setCustomMode(false); }}
               className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1 ${
                 tab === t.id ? 'bg-white shadow-sm text-brown' : 'text-brown-light'
               }`}
@@ -193,7 +351,7 @@ function AddFoodModal({ onClose }: { onClose: () => void }) {
                   key={food.name}
                   food={food}
                   selected={selectedFood?.name === food.name}
-                  onClick={() => setSelectedFood(selectedFood?.name === food.name ? null : food)}
+                  onClick={() => selectFood(selectedFood?.name === food.name ? null : food)}
                 />
               ))}
             </div>
@@ -230,7 +388,7 @@ function AddFoodModal({ onClose }: { onClose: () => void }) {
                   key={`${food.barcode || food.name}-${i}`}
                   food={food}
                   selected={selectedFood?.name === food.name}
-                  onClick={() => setSelectedFood(selectedFood?.name === food.name ? null : food)}
+                  onClick={() => selectFood(selectedFood?.name === food.name ? null : food)}
                 />
               ))}
               {!apiLoading && !debouncedApiSearch.trim() && (
@@ -259,7 +417,7 @@ function AddFoodModal({ onClose }: { onClose: () => void }) {
                   </div>
                 </div>
                 <button
-                  onClick={() => { setScanResult(null); setSelectedFood(null); }}
+                  onClick={() => { setScanResult(null); selectFood(null); }}
                   className="text-xs text-terracotta btn-press"
                 >
                   Scan another
@@ -318,6 +476,23 @@ function AddFoodModal({ onClose }: { onClose: () => void }) {
           </button>
         )}
 
+        {/* Quantity picker - show when food is selected */}
+        {(selectedFood || (customMode && custom.name && custom.calories)) && (
+          <div className="mt-4">
+            <p className="text-xs font-medium text-brown-light mb-2">Amount</p>
+            <QuantityPicker
+              quantity={quantity} unit={quantityUnit}
+              onQuantityChange={setQuantity} onUnitChange={setQuantityUnit}
+              servingGrams={servingGrams}
+            />
+            {multiplier !== 1 && selectedFood && (
+              <p className="text-xs text-brown-light mt-2 text-center">
+                {Math.round(selectedFood.calories * multiplier)} cal &middot; P: {Math.round(selectedFood.protein * multiplier * 10) / 10}g &middot; C: {Math.round(selectedFood.carbs * multiplier * 10) / 10}g &middot; F: {Math.round(selectedFood.fat * multiplier * 10) / 10}g
+              </p>
+            )}
+          </div>
+        )}
+
         <button
           onClick={handleAdd}
           disabled={customMode ? (!custom.name || !custom.calories) : !selectedFood}
@@ -333,6 +508,7 @@ function AddFoodModal({ onClose }: { onClose: () => void }) {
 export default function FoodPage() {
   const { foodEntries, loadFood, deleteFood, loadSummary, summary } = useAppStore();
   const [showAdd, setShowAdd] = useState(false);
+  const [editEntry, setEditEntry] = useState<FoodEntry | null>(null);
 
   useEffect(() => {
     loadFood();
@@ -341,6 +517,12 @@ export default function FoodPage() {
 
   const handleClose = () => {
     setShowAdd(false);
+    loadFood();
+    loadSummary();
+  };
+
+  const handleEditClose = () => {
+    setEditEntry(null);
     loadFood();
     loadSummary();
   };
@@ -360,7 +542,7 @@ export default function FoodPage() {
               <div className="text-center py-2">
                 <p className="text-3xl font-bold text-terracotta">{summary.food.meal_count}</p>
                 <p className="text-xs text-brown-light mt-1">
-                  {summary.food.total_calories > 0 && `${summary.food.total_calories} calories total`}
+                  {summary.food.total_calories > 0 && `${Math.round(summary.food.total_calories)} calories total`}
                 </p>
               </div>
             </>
@@ -382,7 +564,7 @@ export default function FoodPage() {
               </div>
               <div className="grid grid-cols-4 gap-2 text-center">
                 <div>
-                  <p className="text-lg font-bold text-terracotta">{summary.food.total_calories}</p>
+                  <p className="text-lg font-bold text-terracotta">{Math.round(summary.food.total_calories)}</p>
                   <p className="text-[10px] text-brown-light">Calories</p>
                 </div>
                 <div>
@@ -418,20 +600,28 @@ export default function FoodPage() {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-white rounded-xl p-3 shadow-sm flex items-center justify-between"
+              className="bg-white rounded-xl p-3 shadow-sm flex items-center justify-between cursor-pointer active:bg-cream/50 transition-colors"
+              onClick={() => setEditEntry(entry)}
             >
               <div>
-                <p className="font-medium text-brown text-sm">{entry.name}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="font-medium text-brown text-sm">{entry.name}</p>
+                  {entry.quantity !== 1 && (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-terracotta/10 text-terracotta rounded-md font-medium">
+                      {entry.quantity !== Math.floor(entry.quantity) ? entry.quantity.toFixed(1) : entry.quantity}{entry.quantity_unit !== 'serving' ? entry.quantity_unit : 'x'}
+                    </span>
+                  )}
+                </div>
                 <div className="flex gap-2 mt-0.5 text-xs text-brown-light">
                   <span className="capitalize px-1.5 py-0.5 bg-cream-dark rounded-md">{entry.meal_type}</span>
-                  <span>P: {entry.protein}g</span>
-                  <span>C: {entry.carbs}g</span>
-                  <span>F: {entry.fat}g</span>
+                  <span>P: {entry.display_protein ?? entry.protein}g</span>
+                  <span>C: {entry.display_carbs ?? entry.carbs}g</span>
+                  <span>F: {entry.display_fat ?? entry.fat}g</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-terracotta text-sm">{entry.calories}</span>
-                <button onClick={() => { deleteFood(entry.id); loadFood(); loadSummary(); }}
+                <span className="font-bold text-terracotta text-sm">{entry.display_calories ?? entry.calories}</span>
+                <button onClick={(e) => { e.stopPropagation(); deleteFood(entry.id); loadFood(); loadSummary(); }}
                   className="p-1.5 rounded-full hover:bg-cream-dark btn-press">
                   <Trash2 size={14} className="text-brown-light" />
                 </button>
@@ -453,6 +643,7 @@ export default function FoodPage() {
 
       <AnimatePresence>
         {showAdd && <AddFoodModal onClose={handleClose} />}
+        {editEntry && <EditFoodModal entry={editEntry} onClose={handleEditClose} />}
       </AnimatePresence>
     </div>
   );

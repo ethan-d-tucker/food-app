@@ -8,6 +8,14 @@ export interface NormalizedFood {
   barcode: string;
   image_url: string;
   serving_size: string;
+  serving_grams: number | null;
+}
+
+function parseServingGrams(servingSize: string | undefined): number | null {
+  if (!servingSize) return null;
+  // Match patterns like "28g", "100 g", "1 cup (240g)", "3 cookies (33g)"
+  const match = servingSize.match(/(\d+(?:\.\d+)?)\s*g(?:\b|$)/i);
+  return match ? parseFloat(match[1]) : null;
 }
 
 function normalizeProduct(product: any): NormalizedFood | null {
@@ -18,16 +26,31 @@ function normalizeProduct(product: any): NormalizedFood | null {
   const hasServing = n['energy-kcal_serving'] !== undefined;
   const suffix = hasServing ? '_serving' : '_100g';
 
+  let calories = Math.round(n[`energy-kcal${suffix}`] || n['energy-kcal_100g'] || 0);
+
+  // Sanity check: if calories seem like kJ instead of kcal, convert
+  // Pure fat is ~900 kcal/100g, so anything above that per-100g is likely kJ
+  const per100g = n['energy-kcal_100g'] || 0;
+  if (per100g > 900) {
+    // Recalculate assuming the values are actually in kJ
+    const rawVal = n[`energy-kcal${suffix}`] || n['energy-kcal_100g'] || 0;
+    calories = Math.round(rawVal / 4.184);
+  }
+
+  const servingSizeStr = product.serving_size || (hasServing ? 'per serving' : 'per 100g');
+  const servingGrams = parseServingGrams(product.serving_size) || (hasServing ? null : 100);
+
   return {
     name: product.product_name,
-    calories: Math.round(n[`energy-kcal${suffix}`] || n['energy-kcal_100g'] || 0),
+    calories,
     protein: Math.round((n[`proteins${suffix}`] || n['proteins_100g'] || 0) * 10) / 10,
     carbs: Math.round((n[`carbohydrates${suffix}`] || n['carbohydrates_100g'] || 0) * 10) / 10,
     fat: Math.round((n[`fat${suffix}`] || n['fat_100g'] || 0) * 10) / 10,
     fiber: Math.round((n[`fiber${suffix}`] || n['fiber_100g'] || 0) * 10) / 10,
     barcode: product.code || '',
     image_url: product.image_small_url || product.image_url || '',
-    serving_size: product.serving_size || (hasServing ? 'per serving' : 'per 100g'),
+    serving_size: servingSizeStr,
+    serving_grams: servingGrams,
   };
 }
 

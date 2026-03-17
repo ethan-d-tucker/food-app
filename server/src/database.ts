@@ -158,4 +158,12 @@ if (!exerciseCols.find((c: any) => c.name === 'source')) {
   db.prepare("ALTER TABLE exercise_entries ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'").run();
 }
 
+// Add quantity/unit columns to food_entries if they don't exist
+const foodCols = db.prepare("PRAGMA table_info(food_entries)").all() as any[];
+if (!foodCols.find((c: any) => c.name === 'quantity')) {
+  db.prepare("ALTER TABLE food_entries ADD COLUMN quantity REAL NOT NULL DEFAULT 1").run();
+  db.prepare("ALTER TABLE food_entries ADD COLUMN quantity_unit TEXT NOT NULL DEFAULT 'serving'").run();
+  db.prepare("ALTER TABLE food_entries ADD COLUMN serving_grams REAL").run();
+}
+
 export default db;

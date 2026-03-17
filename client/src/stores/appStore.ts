@@ -33,6 +33,14 @@ export interface FoodEntry {
   fiber: number;
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
   created_at: string;
+  quantity: number;
+  quantity_unit: string;
+  serving_grams: number | null;
+  display_calories: number;
+  display_protein: number;
+  display_carbs: number;
+  display_fat: number;
+  display_fiber: number;
 }
 
 export interface ExerciseEntry {
@@ -145,6 +153,7 @@ interface AppState {
   petPet: () => Promise<void>;
   loadFood: (date?: string) => Promise<void>;
   addFood: (data: any) => Promise<void>;
+  updateFood: (id: string, data: { quantity: number; quantity_unit: string }) => Promise<void>;
   deleteFood: (id: string) => Promise<void>;
   loadExercise: (date?: string) => Promise<void>;
   addExercise: (data: any) => Promise<void>;
@@ -259,6 +268,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       newAchievement: result.new_achievements?.length > 0 ? result.new_achievements[0] : state.newAchievement,
     }));
     if (result.level) get().loadProgression();
+  },
+
+  updateFood: async (id, data) => {
+    const updated = await api.updateFood(id, data);
+    set((state) => ({
+      foodEntries: state.foodEntries.map((e) => e.id === id ? updated : e),
+    }));
   },
 
   deleteFood: async (id) => {

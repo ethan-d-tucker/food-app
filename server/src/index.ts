@@ -223,19 +223,25 @@ app.post('/api/profiles/:id/pet', (req, res) => {
 
 app.get('/api/profiles/:id/food', (req, res) => {
   const date = req.query.date as string || new Date().toISOString().split('T')[0];
-  const entries = db.prepare(
-    "SELECT * FROM food_entries WHERE profile_id = ? AND date(created_at) = ? ORDER BY created_at DESC"
-  ).all(req.params.id, date);
+  const entries = db.prepare(`
+    SELECT *,
+      ROUND(calories * quantity) as display_calories,
+      ROUND(protein * quantity, 1) as display_protein,
+      ROUND(carbs * quantity, 1) as display_carbs,
+      ROUND(fat * quantity, 1) as display_fat,
+      ROUND(fiber * quantity, 1) as display_fiber
+    FROM food_entries WHERE profile_id = ? AND date(created_at) = ? ORDER BY created_at DESC
+  `).all(req.params.id, date);
   res.json(entries);
 });
 
 app.post('/api/profiles/:id/food', (req, res) => {
-  const { name, calories, protein, carbs, fat, fiber, meal_type } = req.body;
+  const { name, calories, protein, carbs, fat, fiber, meal_type, quantity, quantity_unit, serving_grams } = req.body;
   const id = crypto.randomUUID();
 
   db.prepare(
-    'INSERT INTO food_entries (id, profile_id, name, calories, protein, carbs, fat, fiber, meal_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, req.params.id, name, calories, protein || 0, carbs || 0, fat || 0, fiber || 0, meal_type);
+    'INSERT INTO food_entries (id, profile_id, name, calories, protein, carbs, fat, fiber, meal_type, quantity, quantity_unit, serving_grams) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, req.params.id, name, calories, protein || 0, carbs || 0, fat || 0, fiber || 0, meal_type, quantity || 1, quantity_unit || 'serving', serving_grams || null);
 
   // Update streak
   updateStreak(req.params.id);
@@ -281,6 +287,26 @@ app.post('/api/profiles/:id/food', (req, res) => {
 
   const entry = db.prepare('SELECT * FROM food_entries WHERE id = ?').get(id);
   res.json({ entry });
+});
+
+app.put('/api/food/:id', (req, res) => {
+  const { quantity, quantity_unit } = req.body;
+  const entry = db.prepare('SELECT * FROM food_entries WHERE id = ?').get(req.params.id) as any;
+  if (!entry) return res.status(404).json({ error: 'Entry not found' });
+
+  db.prepare('UPDATE food_entries SET quantity = ?, quantity_unit = ? WHERE id = ?')
+    .run(quantity, quantity_unit || entry.quantity_unit, req.params.id);
+
+  const updated = db.prepare(`
+    SELECT *,
+      ROUND(calories * quantity) as display_calories,
+      ROUND(protein * quantity, 1) as display_protein,
+      ROUND(carbs * quantity, 1) as display_carbs,
+      ROUND(fat * quantity, 1) as display_fat,
+      ROUND(fiber * quantity, 1) as display_fiber
+    FROM food_entries WHERE id = ?
+  `).get(req.params.id);
+  res.json(updated);
 });
 
 app.delete('/api/food/:id', (req, res) => {
@@ -362,11 +388,11 @@ app.get('/api/profiles/:id/summary', (req, res) => {
   const foodSummary = db.prepare(`
     SELECT
       COUNT(*) as meal_count,
-      COALESCE(SUM(calories), 0) as total_calories,
-      COALESCE(SUM(protein), 0) as total_protein,
-      COALESCE(SUM(carbs), 0) as total_carbs,
-      COALESCE(SUM(fat), 0) as total_fat,
-      COALESCE(SUM(fiber), 0) as total_fiber
+      COALESCE(SUM(calories * quantity), 0) as total_calories,
+      COALESCE(SUM(protein * quantity), 0) as total_protein,
+      COALESCE(SUM(carbs * quantity), 0) as total_carbs,
+      COALESCE(SUM(fat * quantity), 0) as total_fat,
+      COALESCE(SUM(fiber * quantity), 0) as total_fiber
     FROM food_entries WHERE profile_id = ? AND date(created_at) = ?
   `).get(req.params.id, date);
 
@@ -428,11 +454,11 @@ app.get('/api/profiles/:id/weekly-summary', (req, res) => {
   const food = db.prepare(`
     SELECT
       COUNT(*) as total_meals,
-      COALESCE(SUM(calories), 0) as total_calories,
-      COALESCE(SUM(protein), 0) as total_protein,
-      COALESCE(SUM(carbs), 0) as total_carbs,
-      COALESCE(SUM(fat), 0) as total_fat,
-      COALESCE(SUM(fiber), 0) as total_fiber,
+      COALESCE(SUM(calories * quantity), 0) as total_calories,
+      COALESCE(SUM(protein * quantity), 0) as total_protein,
+      COALESCE(SUM(carbs * quantity), 0) as total_carbs,
+      COALESCE(SUM(fat * quantity), 0) as total_fat,
+      COALESCE(SUM(fiber * quantity), 0) as total_fiber,
       COUNT(DISTINCT date(created_at)) as days_with_food
     FROM food_entries WHERE profile_id = ? AND date(created_at) >= ? AND date(created_at) <= ?
   `).get(req.params.id, weekStart, weekEndStr) as any;

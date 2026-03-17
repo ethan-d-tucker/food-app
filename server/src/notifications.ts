@@ -91,7 +91,7 @@ export function checkPetAlerts(): void {
       if (lastReminder === today) continue;
 
       const foodSummary = db.prepare(`
-        SELECT COALESCE(SUM(calories), 0) as total_calories
+        SELECT COALESCE(SUM(calories * quantity), 0) as total_calories
         FROM food_entries WHERE profile_id = ? AND date(created_at) = ?
       `).get(profile.profile_id, today) as any;
 

@@ -24,6 +24,8 @@ export const api = {
     request<any[]>(`/profiles/${profileId}/food${date ? `?date=${date}` : ''}`),
   addFood: (profileId: string, data: any) =>
     request<any>(`/profiles/${profileId}/food`, { method: 'POST', body: JSON.stringify(data) }),
+  updateFood: (id: string, data: any) =>
+    request<any>(`/food/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteFood: (id: string) => request<any>(`/food/${id}`, { method: 'DELETE' }),
 
   // Exercise
@@ -76,7 +78,7 @@ export const api = {
     request<any>(`/checklist/${id}/complete${date ? `?date=${date}` : ''}`, { method: 'DELETE' }),
 
   // Food search (Open Food Facts)
-  searchFood: (query: string) => request<any[]>(`/food-search?q=${encodeURIComponent(query)}`),
+  searchFood: (query: string, signal?: AbortSignal) => request<any[]>(`/food-search?q=${encodeURIComponent(query)}`, { signal }),
   lookupBarcode: (barcode: string) => request<any>(`/food-barcode/${barcode}`),
 
   // Exercise import
