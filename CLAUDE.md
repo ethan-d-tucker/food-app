@@ -8,7 +8,7 @@ A mobile-first web app where users track food and exercise, with virtual pets wh
 - **Backend**: Express 5, better-sqlite3 (SQLite WAL mode), Zod validation
 - **Runtime**: Node.js with tsx (TypeScript executor)
 - **Barcode scanning**: html5-qrcode
-- **Food database**: Open Food Facts API (free, no key needed)
+- **Food database**: Open Food Facts API (free, no key needed, server-side cached 10min)
 - **Notifications**: ntfy (push notifications)
 
 ## Project Structure
@@ -28,7 +28,7 @@ A mobile-first web app where users track food and exercise, with virtual pets wh
   /src/pet-engine.ts  - Pet stat calculations, XP/leveling formulas
   /src/achievements.ts - Achievement definitions & unlock checks
   /src/accessories.ts  - Wardrobe items & equip logic
-  /src/open-food-facts.ts  - Open Food Facts API proxy
+  /src/open-food-facts.ts  - Open Food Facts API proxy (in-memory cache, 10min TTL)
   /src/notifications.ts    - ntfy integration & scheduler
   /src/exercise-import.ts  - Health Auto Export webhook handler
   /data           - SQLite database file (gitignored)
@@ -65,6 +65,7 @@ A mobile-first web app where users track food and exercise, with virtual pets wh
 - **Domain**: https://food.localmusicoklahoma.store
 - **Tunnel**: Cloudflare tunnel → localhost:3003
 - **Deploy flow**: `git push` → SSH to server → `git pull && npm run build` → `nssm restart food-app`
+- **IMPORTANT**: Always deploy after pushing new features/fixes. Run: `ssh server@192.168.12.254 "cd C:\\Users\\server\\Desktop\\food-app && git pull && npm run build && nssm restart food-app"`
 
 ## Port
 Server runs on port 3003 (configurable via PORT env var)
