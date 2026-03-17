@@ -195,7 +195,8 @@ export function deriveMood(stats: PetStats): PetMood {
   const hour = new Date().getHours();
   if (hour >= 23 || hour < 7) return 'sleeping';
   if (stats.fullness < 10) return 'starving';
-  if (stats.is_stuffed || stats.is_exhausted) return 'sick';
+  // Only show sick if BOTH stuffed/exhausted — single debuff just lowers happiness
+  if (stats.is_stuffed && stats.is_exhausted) return 'sick';
   if (stats.happiness > 85) return 'ecstatic';
   if (stats.happiness > 65) return 'happy';
   if (stats.happiness > 45) return 'content';
