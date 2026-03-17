@@ -21,7 +21,27 @@ export type PetMood =
 
 const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
 
-export function calculateDecay(stats: PetStats, now: Date): PetStats {
+export interface HappinessWeights {
+  food: number;     // 0-100, default 50
+  exercise: number; // 0-100, default 30
+  interaction: number; // 0-100, default 20
+}
+
+const DEFAULT_WEIGHTS: HappinessWeights = { food: 50, exercise: 30, interaction: 20 };
+
+function calcHappiness(fullness: number, fitness: number, interaction: number, weights: HappinessWeights = DEFAULT_WEIGHTS): number {
+  const total = weights.food + weights.exercise + weights.interaction;
+  if (total === 0) return 50;
+  // Normalize weights so they always sum to produce a 0-100 scale
+  const wF = weights.food / total;
+  const wE = weights.exercise / total;
+  const wI = weights.interaction / total;
+  // interaction is 0-20, scale to 0-100 for weighted average
+  const base = fullness * wF + fitness * wE + (interaction * 5) * wI;
+  return clamp(base, 10, 100);
+}
+
+export function calculateDecay(stats: PetStats, now: Date, weights?: HappinessWeights): PetStats {
   const lastUpdate = new Date(stats.last_updated);
   const hoursElapsed = (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60);
 
@@ -32,8 +52,7 @@ export function calculateDecay(stats: PetStats, now: Date): PetStats {
   const fitness = clamp(stats.fitness - hoursElapsed * 1, 10, 100);
   const interactionDecay = clamp(stats.interaction_bonus - hoursElapsed * 0.5, 0, 20);
 
-  const baseHappiness = fullness * 0.4 + fitness * 0.4 + interactionDecay * 1.0;
-  const happiness = clamp(baseHappiness, 10, 100);
+  const happiness = calcHappiness(fullness, fitness, interactionDecay, weights);
 
   return {
     ...stats,
@@ -55,7 +74,7 @@ export function getNutritionQuality(protein: number, fiber: number, calories: nu
   return clamp(quality, 0.5, 1.5);
 }
 
-export function applyFood(stats: PetStats, calories: number, protein: number, fiber: number, trackingMode: 'casual' | 'structured' = 'structured'): PetStats {
+export function applyFood(stats: PetStats, calories: number, protein: number, fiber: number, trackingMode: 'casual' | 'structured' = 'structured', weights?: HappinessWeights): PetStats {
   const quality = trackingMode === 'casual' ? 1.0 : getNutritionQuality(protein, fiber, calories);
   let points: number;
   if (trackingMode === 'casual') {
@@ -70,8 +89,7 @@ export function applyFood(stats: PetStats, calories: number, protein: number, fi
 
   const fullness = clamp(stats.fullness + points, 0, 100);
 
-  const baseHappiness = fullness * 0.4 + stats.fitness * 0.4 + stats.interaction_bonus * 1.0;
-  const happiness = clamp(baseHappiness, 10, 100);
+  const happiness = calcHappiness(fullness, stats.fitness, stats.interaction_bonus, weights);
 
   return {
     ...stats,
@@ -83,7 +101,7 @@ export function applyFood(stats: PetStats, calories: number, protein: number, fi
   };
 }
 
-export function applyExercise(stats: PetStats, durationMinutes: number, intensity: string): PetStats {
+export function applyExercise(stats: PetStats, durationMinutes: number, intensity: string, weights?: HappinessWeights): PetStats {
   let points: number;
   switch (intensity) {
     case 'intense': points = 35; break;
@@ -95,8 +113,7 @@ export function applyExercise(stats: PetStats, durationMinutes: number, intensit
 
   const fitness = clamp(stats.fitness + points, 0, 100);
 
-  const baseHappiness = stats.fullness * 0.4 + fitness * 0.4 + stats.interaction_bonus * 1.0;
-  const happiness = clamp(baseHappiness, 10, 100);
+  const happiness = calcHappiness(stats.fullness, fitness, stats.interaction_bonus, weights);
 
   return {
     ...stats,
@@ -117,8 +134,7 @@ export function applyPetting(stats: PetStats): PetStats {
   }
 
   const interaction_bonus = clamp(stats.interaction_bonus + 3, 0, 20);
-  const baseHappiness = stats.fullness * 0.4 + stats.fitness * 0.4 + interaction_bonus * 1.0;
-  const happiness = clamp(baseHappiness, 10, 100);
+  const happiness = calcHappiness(stats.fullness, stats.fitness, interaction_bonus);
 
   return {
     ...stats,

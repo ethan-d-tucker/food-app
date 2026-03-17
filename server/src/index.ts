@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import db from './database.js';
-import { calculateDecay, applyFood, applyExercise, applyPetting, deriveMood, calculateLevel, calculateFoodXp, calculateExerciseXp, calculateStreakXp, xpToNextLevel } from './pet-engine.js';
+import { calculateDecay, applyFood, applyExercise, applyPetting, deriveMood, calculateLevel, calculateFoodXp, calculateExerciseXp, calculateStreakXp, xpToNextLevel, type HappinessWeights } from './pet-engine.js';
 import { checkAchievements, getProfileAchievements } from './achievements.js';
 import { getAccessories, getEquipped, equipAccessory } from './accessories.js';
 import { searchFoods, lookupBarcode as lookupBarcodeAPI } from './open-food-facts.js';
@@ -13,6 +13,14 @@ import { importExerciseEntries, parseHealthAutoExport } from './exercise-import.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3003;
+
+// ─── Happiness Weights Helper ───
+
+function getWeights(profileId: string): HappinessWeights {
+  const s = db.prepare('SELECT happiness_food, happiness_exercise, happiness_interaction FROM settings WHERE profile_id = ?').get(profileId) as any;
+  if (!s) return { food: 50, exercise: 30, interaction: 20 };
+  return { food: s.happiness_food, exercise: s.happiness_exercise, interaction: s.happiness_interaction };
+}
 
 // ─── Streak Helper ───
 
@@ -96,7 +104,7 @@ app.get('/api/profiles', (_req, res) => {
       is_exhausted: !!rawStats.is_exhausted,
       last_updated: rawStats.last_updated,
       last_petted: rawStats.last_petted,
-    }, now);
+    }, now, getWeights(p.id));
 
     // Persist decayed stats
     db.prepare(`
@@ -179,7 +187,7 @@ app.put('/api/profiles/:id', (req, res) => {
       fullness: rawStats.fullness, fitness: rawStats.fitness, happiness: rawStats.happiness,
       interaction_bonus: rawStats.interaction_bonus, is_stuffed: !!rawStats.is_stuffed,
       is_exhausted: !!rawStats.is_exhausted, last_updated: rawStats.last_updated, last_petted: rawStats.last_petted,
-    }, new Date());
+    }, new Date(), getWeights(req.params.id));
     return res.json({ ...updated, pet_stats: petStats, mood: deriveMood(petStats) });
   }
 
@@ -196,7 +204,7 @@ app.post('/api/profiles/:id/pet', (req, res) => {
     fullness: rawStats.fullness, fitness: rawStats.fitness, happiness: rawStats.happiness,
     interaction_bonus: rawStats.interaction_bonus, is_stuffed: !!rawStats.is_stuffed,
     is_exhausted: !!rawStats.is_exhausted, last_updated: rawStats.last_updated, last_petted: rawStats.last_petted,
-  }, new Date());
+  }, new Date(), getWeights(req.params.id));
 
   const updated = applyPetting(current);
 
@@ -249,15 +257,16 @@ app.post('/api/profiles/:id/food', (req, res) => {
   // Update pet stats
   const rawStats = db.prepare('SELECT * FROM pet_stats WHERE profile_id = ?').get(req.params.id) as any;
   if (rawStats) {
+    const weights = getWeights(req.params.id);
     const current = calculateDecay({
       fullness: rawStats.fullness, fitness: rawStats.fitness, happiness: rawStats.happiness,
       interaction_bonus: rawStats.interaction_bonus, is_stuffed: !!rawStats.is_stuffed,
       is_exhausted: !!rawStats.is_exhausted, last_updated: rawStats.last_updated, last_petted: rawStats.last_petted,
-    }, new Date());
+    }, new Date(), weights);
 
     const settings = db.prepare('SELECT tracking_mode FROM settings WHERE profile_id = ?').get(req.params.id) as any;
     const trackingMode = settings?.tracking_mode || 'structured';
-    const updated = applyFood(current, calories, protein || 0, fiber || 0, trackingMode);
+    const updated = applyFood(current, calories, protein || 0, fiber || 0, trackingMode, weights);
 
     db.prepare(`
       UPDATE pet_stats SET fullness = ?, fitness = ?, happiness = ?,
@@ -338,13 +347,14 @@ app.post('/api/profiles/:id/exercise', (req, res) => {
   // Update pet stats
   const rawStats = db.prepare('SELECT * FROM pet_stats WHERE profile_id = ?').get(req.params.id) as any;
   if (rawStats) {
+    const weights = getWeights(req.params.id);
     const current = calculateDecay({
       fullness: rawStats.fullness, fitness: rawStats.fitness, happiness: rawStats.happiness,
       interaction_bonus: rawStats.interaction_bonus, is_stuffed: !!rawStats.is_stuffed,
       is_exhausted: !!rawStats.is_exhausted, last_updated: rawStats.last_updated, last_petted: rawStats.last_petted,
-    }, new Date());
+    }, new Date(), weights);
 
-    const updated = applyExercise(current, duration_minutes, intensity);
+    const updated = applyExercise(current, duration_minutes, intensity, weights);
 
     db.prepare(`
       UPDATE pet_stats SET fullness = ?, fitness = ?, happiness = ?,
@@ -515,16 +525,20 @@ app.post('/api/profiles/:id/treat', (req, res) => {
   // Apply treat bonus to pet stats
   const rawStats = db.prepare('SELECT * FROM pet_stats WHERE profile_id = ?').get(req.params.id) as any;
   if (rawStats) {
+    const weights = getWeights(req.params.id);
     const current = calculateDecay({
       fullness: rawStats.fullness, fitness: rawStats.fitness, happiness: rawStats.happiness,
       interaction_bonus: rawStats.interaction_bonus, is_stuffed: !!rawStats.is_stuffed,
       is_exhausted: !!rawStats.is_exhausted, last_updated: rawStats.last_updated, last_petted: rawStats.last_petted,
-    }, new Date());
+    }, new Date(), weights);
 
     const interaction_bonus = Math.min(current.interaction_bonus + 15, 20);
-    const baseHappiness = current.fullness * 0.4 + current.fitness * 0.4 + interaction_bonus * 1.0;
-    const penalties = (current.is_stuffed ? 15 : 0) + (current.is_exhausted ? 15 : 0);
-    const happiness = Math.max(10, Math.min(100, baseHappiness - penalties));
+    // Use the same weighted happiness formula
+    const total = weights.food + weights.exercise + weights.interaction;
+    const wF = total > 0 ? weights.food / total : 0.4;
+    const wE = total > 0 ? weights.exercise / total : 0.4;
+    const wI = total > 0 ? weights.interaction / total : 0.2;
+    const happiness = Math.max(10, Math.min(100, current.fullness * wF + current.fitness * wE + (interaction_bonus * 5) * wI));
 
     db.prepare(`
       UPDATE pet_stats SET interaction_bonus = ?, happiness = ?, last_updated = ?
@@ -653,17 +667,20 @@ app.post('/api/checklist/:id/complete', (req, res) => {
   const rawStats = db.prepare('SELECT * FROM pet_stats WHERE profile_id = ?').get(item.profile_id) as any;
   let petResponse: any = {};
   if (rawStats) {
+    const weights = getWeights(item.profile_id);
     const current = calculateDecay({
       fullness: rawStats.fullness, fitness: rawStats.fitness, happiness: rawStats.happiness,
       interaction_bonus: rawStats.interaction_bonus, is_stuffed: !!rawStats.is_stuffed,
       is_exhausted: !!rawStats.is_exhausted, last_updated: rawStats.last_updated, last_petted: rawStats.last_petted,
-    }, new Date());
+    }, new Date(), weights);
 
     const fullness = Math.min(100, current.fullness + 5);
     const interaction_bonus = Math.min(20, current.interaction_bonus + 3);
-    const baseHappiness = fullness * 0.4 + current.fitness * 0.4 + interaction_bonus * 1.0;
-    const penalties = (current.is_stuffed ? 15 : 0) + (current.is_exhausted ? 15 : 0);
-    const happiness = Math.max(10, Math.min(100, baseHappiness - penalties));
+    const total = weights.food + weights.exercise + weights.interaction;
+    const wF = total > 0 ? weights.food / total : 0.4;
+    const wE = total > 0 ? weights.exercise / total : 0.4;
+    const wI = total > 0 ? weights.interaction / total : 0.2;
+    const happiness = Math.max(10, Math.min(100, fullness * wF + current.fitness * wE + (interaction_bonus * 5) * wI));
 
     db.prepare(`UPDATE pet_stats SET fullness = ?, interaction_bonus = ?, happiness = ?, last_updated = ? WHERE profile_id = ?`)
       .run(fullness, interaction_bonus, happiness, new Date().toISOString(), item.profile_id);

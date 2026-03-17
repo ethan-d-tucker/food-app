@@ -246,6 +246,51 @@ export default function SettingsPage() {
         </div>
       </Section>
 
+      {/* Pet Happiness */}
+      <Section title="Pet Happiness" icon={<span className="text-lg">💛</span>}>
+        <p className="text-xs text-brown-light mb-3">
+          Control what makes your pet happy. Slide to zero to ignore a category entirely.
+        </p>
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-brown">Food</label>
+              <span className="text-xs text-brown-light">{s.happiness_food ?? 50}</span>
+            </div>
+            <input
+              type="range" min={0} max={100} value={s.happiness_food ?? 50}
+              onChange={(e) => save({ happiness_food: Number(e.target.value) })}
+              className="w-full accent-terracotta"
+            />
+            <p className="text-[10px] text-brown-light mt-0.5">How much logging food affects happiness</p>
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-brown">Exercise</label>
+              <span className="text-xs text-brown-light">{s.happiness_exercise ?? 30}</span>
+            </div>
+            <input
+              type="range" min={0} max={100} value={s.happiness_exercise ?? 30}
+              onChange={(e) => save({ happiness_exercise: Number(e.target.value) })}
+              className="w-full accent-sage"
+            />
+            <p className="text-[10px] text-brown-light mt-0.5">How much logging exercise affects happiness</p>
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-brown">Interaction</label>
+              <span className="text-xs text-brown-light">{s.happiness_interaction ?? 20}</span>
+            </div>
+            <input
+              type="range" min={0} max={100} value={s.happiness_interaction ?? 20}
+              onChange={(e) => save({ happiness_interaction: Number(e.target.value) })}
+              className="w-full accent-mustard"
+            />
+            <p className="text-[10px] text-brown-light mt-0.5">Petting, treats, and checklist completions</p>
+          </div>
+        </div>
+      </Section>
+
       {/* Notifications */}
       <Section title="Notifications" icon={s.ntfy_enabled ? <Bell size={16} className="text-terracotta" /> : <BellOff size={16} className="text-brown-light" />} collapsible>
         <div className="flex items-center justify-between mb-3">

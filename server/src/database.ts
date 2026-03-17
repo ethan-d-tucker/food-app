@@ -166,4 +166,12 @@ if (!foodCols.find((c: any) => c.name === 'quantity')) {
   db.prepare("ALTER TABLE food_entries ADD COLUMN serving_grams REAL").run();
 }
 
+// Add happiness weight settings columns
+const settingsCols = db.prepare("PRAGMA table_info(settings)").all() as any[];
+if (!settingsCols.find((c: any) => c.name === 'happiness_food')) {
+  db.prepare("ALTER TABLE settings ADD COLUMN happiness_food INTEGER NOT NULL DEFAULT 50").run();
+  db.prepare("ALTER TABLE settings ADD COLUMN happiness_exercise INTEGER NOT NULL DEFAULT 30").run();
+  db.prepare("ALTER TABLE settings ADD COLUMN happiness_interaction INTEGER NOT NULL DEFAULT 20").run();
+}
+
 export default db;

@@ -73,6 +73,9 @@ export interface Settings {
   ntfy_goal_reminders: number;
   blocker_enabled: number;
   blocker_mode: 'gentle' | 'hard';
+  happiness_food: number;
+  happiness_exercise: number;
+  happiness_interaction: number;
 }
 
 interface DailySummary {
