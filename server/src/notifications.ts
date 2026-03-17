@@ -14,15 +14,17 @@ export async function sendNotification(
 ): Promise<boolean> {
   if (!topic) return false;
   try {
-    const url = `${server.replace(/\/+$/, '')}/${topic}`;
+    const url = server.replace(/\/+$/, '');
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Title': title,
-        'Priority': String(priority),
-        'Tags': 'paw_prints',
-      },
-      body: message,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic,
+        title,
+        message,
+        priority,
+        tags: ['paw_prints'],
+      }),
     });
     return res.ok;
   } catch {
