@@ -166,11 +166,20 @@ export function importExerciseEntries(profileId: string, entries: ImportEntry[])
   return { imported, skipped };
 }
 
+// Extract numeric value from Health Auto Export fields
+// The app sends energy/heart rate as either plain numbers or objects like { qty: 150, units: "kcal" }
+function extractQty(val: any): number {
+  if (val == null) return 0;
+  if (typeof val === 'number') return val;
+  if (typeof val === 'object' && val.qty != null) return Number(val.qty) || 0;
+  return Number(val) || 0;
+}
+
 // Parse Health Auto Export app's webhook format
 export function parseHealthAutoExport(body: any): ImportEntry[] {
   // Health Auto Export sends data in various formats. Common formats:
   // { data: { workouts: [...] } }
-  // { metrics: [...] }
+  // { workouts: [...] }
   // Or just an array of workouts
   const entries: ImportEntry[] = [];
 
@@ -178,12 +187,26 @@ export function parseHealthAutoExport(body: any): ImportEntry[] {
 
   for (const w of workouts) {
     if (!w) continue;
+
+    // Duration: seconds (from Health Auto Export) or already in minutes
+    const rawDuration = extractQty(w.duration);
+    // Health Auto Export sends duration in seconds; if value > 300 assume seconds
+    const durationMinutes = rawDuration > 300 ? rawDuration / 60 : (w.duration_minutes || w.durationInMinutes || rawDuration);
+
+    // Calories: Health Auto Export sends as { qty: number, units: "kcal" } objects
+    const calories = extractQty(w.activeEnergy) || extractQty(w.totalEnergyBurned)
+      || extractQty(w.activeEnergyBurned) || extractQty(w.calories_burned) || 0;
+
+    // Heart rate: may be nested object or plain number
+    const heartRate = extractQty(w.heartRateAverage) || extractQty(w.avgHeartRate)
+      || extractQty(w.heart_rate_avg) || undefined;
+
     entries.push({
       name: w.name || w.workoutActivityType,
       workout_type: w.workoutActivityType || w.type,
-      duration_minutes: w.duration ? w.duration / 60 : (w.duration_minutes || w.durationInMinutes || 0),
-      calories_burned: w.activeEnergy || w.totalEnergyBurned || w.calories_burned || w.activeEnergyBurned || 0,
-      heart_rate_avg: w.heartRateAverage || w.avgHeartRate || w.heart_rate_avg,
+      duration_minutes: durationMinutes,
+      calories_burned: calories,
+      heart_rate_avg: heartRate,
       date: w.start || w.startDate || w.date,
     });
   }
