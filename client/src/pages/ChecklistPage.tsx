@@ -152,15 +152,15 @@ export default function ChecklistPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-brown/40 backdrop-blur-sm flex items-end justify-center"
+            className="fixed inset-0 z-50 bg-brown/40 backdrop-blur-sm flex items-center justify-center px-4"
             onClick={() => setShowAdd(false)}
           >
             <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="w-full max-w-[430px] bg-cream rounded-t-3xl p-4"
+              className="w-full max-w-[430px] bg-cream rounded-3xl p-4 max-h-[80vh] overflow-y-auto shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">
