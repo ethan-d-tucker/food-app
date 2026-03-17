@@ -8,6 +8,7 @@ import WardrobeModal from '../components/WardrobeModal';
 import { Flame, Cookie, Star, Shirt } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { getSeasonTheme } from '../lib/themes';
+import { api } from '../lib/api';
 
 function StatBar({ label, value, color }: { label: string; value: number; color: string }) {
   return (
@@ -103,7 +104,22 @@ export default function HomePage() {
   }, [petPet]);
 
   const [wardrobeOpen, setWardrobeOpen] = useState(false);
+  const [equipped, setEquipped] = useState<Record<string, string>>({});
   const seasonTheme = useMemo(() => getSeasonTheme(), []);
+
+  useEffect(() => {
+    if (activeProfileId) {
+      api.getEquipped(activeProfileId).then(setEquipped);
+    }
+  }, [activeProfileId]);
+
+  // Refresh equipped when wardrobe closes
+  const handleWardrobeClose = useCallback(() => {
+    setWardrobeOpen(false);
+    if (activeProfileId) {
+      api.getEquipped(activeProfileId).then(setEquipped);
+    }
+  }, [activeProfileId]);
 
   if (!activeProfile) return null;
 
@@ -141,7 +157,7 @@ export default function HomePage() {
           <TogetherScene profiles={profiles} />
         ) : (
           <div className="text-center" onClick={handlePet}>
-            <PetSVG type={activeProfile.pet_type} mood={activeProfile.mood} size={200} reaction={petReaction?.type || null} />
+            <PetSVG type={activeProfile.pet_type} mood={activeProfile.mood} size={200} reaction={petReaction?.type || null} equipped={equipped} />
           </div>
         )}
 
@@ -282,7 +298,7 @@ export default function HomePage() {
       />
 
       {/* Wardrobe */}
-      <WardrobeModal open={wardrobeOpen} onClose={() => setWardrobeOpen(false)} />
+      <WardrobeModal open={wardrobeOpen} onClose={handleWardrobeClose} />
     </div>
   );
 }

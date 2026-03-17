@@ -69,7 +69,7 @@ export default function WardrobeModal({ open, onClose }: { open: boolean; onClos
             {/* Pet Preview */}
             {activeProfile && (
               <div className="flex justify-center mb-4">
-                <PetSVG type={activeProfile.pet_type} mood={activeProfile.mood} size={120} />
+                <PetSVG type={activeProfile.pet_type} mood={activeProfile.mood} size={120} equipped={equipped} />
               </div>
             )}
 
