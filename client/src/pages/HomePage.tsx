@@ -166,7 +166,7 @@ export default function HomePage() {
 
         {/* Speech Bubble */}
         <div className="mt-3 min-h-[48px] flex items-center justify-center">
-          <SpeechBubble mood={activeProfile.mood} reaction={petReaction} isStuffed={stats?.is_stuffed} isExhausted={stats?.is_exhausted} />
+          <SpeechBubble mood={activeProfile.mood} reaction={petReaction} />
         </div>
 
         {/* Pet Name + Wardrobe */}
@@ -204,23 +204,8 @@ export default function HomePage() {
           className="bg-white rounded-2xl p-4 shadow-sm space-y-2"
         >
           <StatBar label="Fullness" value={stats.fullness} color="#E07A5F" />
-          {stats.is_stuffed && (
-            <p className="text-[11px] text-terracotta font-medium -mt-1 ml-[4.5rem]">
-              Overfed! Happiness -15 until fullness drops below 85
-            </p>
-          )}
           <StatBar label="Fitness" value={stats.fitness} color="#81B29A" />
-          {stats.is_exhausted && (
-            <p className="text-[11px] text-terracotta font-medium -mt-1 ml-[4.5rem]">
-              Overworked! Happiness -15 until fitness drops below 85
-            </p>
-          )}
           <StatBar label="Happy" value={stats.happiness} color="#F2CC8F" />
-          {(stats.is_stuffed || stats.is_exhausted) && (
-            <p className="text-[11px] text-brown-light mt-1">
-              Stats decay over time — fullness drops ~2/hr, fitness ~1/hr. Just wait it out!
-            </p>
-          )}
         </motion.div>
       )}
 

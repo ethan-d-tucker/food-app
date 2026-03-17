@@ -109,35 +109,11 @@ function pickRandom(arr: string[]) {
 interface SpeechBubbleProps {
   mood: string;
   reaction?: { type: 'food' | 'exercise' | 'pet' | 'treat'; mood: string } | null;
-  isStuffed?: boolean;
-  isExhausted?: boolean;
 }
 
-const stuffedDialogue = [
-  "So full... need to digest...",
-  "No more food for now please!",
-  "My belly is so round...",
-  "*lies down* Too much food...",
-  "I ate too much, but I'll be fine!",
-];
-
-const exhaustedDialogue = [
-  "Need to catch my breath...",
-  "So tired from working out...",
-  "Let me rest for a bit...",
-  "*panting* That was intense!",
-  "I pushed too hard today!",
-];
-
-export default function SpeechBubble({ mood, reaction, isStuffed, isExhausted }: SpeechBubbleProps) {
+export default function SpeechBubble({ mood, reaction }: SpeechBubbleProps) {
   const text = reaction
     ? pickRandom(dialogue[`${reaction.type}_reaction`] || dialogue.content)
-    : isStuffed && isExhausted
-    ? pickRandom(dialogue.sick)
-    : isStuffed
-    ? pickRandom(stuffedDialogue)
-    : isExhausted
-    ? pickRandom(exhaustedDialogue)
     : Math.random() < 0.15
     ? pickRandom(seasonalDialogue[getSeason()])
     : pickRandom(dialogue[mood] || dialogue.content);
