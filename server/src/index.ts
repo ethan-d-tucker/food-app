@@ -787,15 +787,30 @@ app.post('/api/profiles/:id/food-status/bypass', (req, res) => {
 
 // ─── Exercise Import ───
 
-app.post('/api/profiles/:id/exercise/import/health-auto-export', (req, res) => {
+// GET endpoint to verify the webhook URL is reachable
+app.get('/api/profiles/:id/exercise/import/health-auto-export', (req, res) => {
   const profile = db.prepare('SELECT id FROM profiles WHERE id = ?').get(req.params.id);
-  if (!profile) return res.status(404).json({ error: 'Profile not found' });
+  res.json({ ok: true, profile_found: !!profile, message: 'Webhook URL is reachable. Send a POST request with workout data.' });
+});
+
+app.post('/api/profiles/:id/exercise/import/health-auto-export', (req, res) => {
+  console.log('[Health Import] Received webhook for profile:', req.params.id);
+  console.log('[Health Import] Body:', JSON.stringify(req.body).slice(0, 1000));
+
+  const profile = db.prepare('SELECT id FROM profiles WHERE id = ?').get(req.params.id);
+  if (!profile) {
+    console.log('[Health Import] Profile not found:', req.params.id);
+    return res.status(404).json({ error: 'Profile not found' });
+  }
 
   try {
     const entries = parseHealthAutoExport(req.body);
+    console.log('[Health Import] Parsed entries:', entries.length, entries.map(e => ({ name: e.name, duration: e.duration_minutes, cal: e.calories_burned })));
     const result = importExerciseEntries(req.params.id, entries);
+    console.log('[Health Import] Result:', result);
     res.json(result);
   } catch (err: any) {
+    console.error('[Health Import] Error:', err.message);
     res.status(400).json({ error: 'Import failed', details: err.message });
   }
 });
