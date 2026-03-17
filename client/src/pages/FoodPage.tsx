@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../stores/appStore';
-import { commonFoods, type FoodItem } from '../data/foods';
+import { commonFoods } from '../data/foods';
 import { api } from '../lib/api';
 import { useDebounce } from '../hooks/useDebounce';
 import BarcodeScanner from '../components/food/BarcodeScanner';

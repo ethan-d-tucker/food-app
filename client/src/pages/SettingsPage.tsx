@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore, type Settings } from '../stores/appStore';
 import PetSVG from '../components/pet/PetSVG';
-import { UserPlus, Save, Bell, BellOff, Shield, ChevronDown, ChevronUp, Watch, Send, Copy, Check } from 'lucide-react';
+import { UserPlus, Bell, BellOff, Shield, ChevronDown, ChevronUp, Watch, Send, Copy, Check } from 'lucide-react';
 
 function ToggleSwitch({ on, onChange, color = 'bg-terracotta' }: { on: boolean; onChange: (v: boolean) => void; color?: string }) {
   return (
@@ -55,7 +55,6 @@ function NumberInput({ label, value, onChange, min = 0, max = 9999, suffix }: { 
 export default function SettingsPage() {
   const { profiles, activeProfileId, setPage, settings, loadSettings, updateSettings } = useAppStore();
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
-  const [saving, setSaving] = useState(false);
   const [local, setLocal] = useState<Partial<Settings>>({});
   const [copied, setCopied] = useState(false);
 
@@ -68,10 +67,8 @@ export default function SettingsPage() {
   }, [settings]);
 
   const save = async (updates: Partial<Settings>) => {
-    setSaving(true);
     setLocal((prev) => ({ ...prev, ...updates }));
     await updateSettings(updates);
-    setSaving(false);
   };
 
   const s = { ...settings, ...local } as Settings;
