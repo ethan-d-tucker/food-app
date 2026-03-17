@@ -167,8 +167,17 @@ export default function HomePage() {
           <h3 className="font-heading font-bold text-sm text-brown mb-3">Today</h3>
           <div className="grid grid-cols-2 gap-3">
             <div className="text-center">
-              <p className="text-2xl font-bold text-terracotta">{summary.food.total_calories}</p>
-              <p className="text-xs text-brown-light">/ {summary.goals.calorie_goal} cal</p>
+              {summary.goals.tracking_mode === 'casual' ? (
+                <>
+                  <p className="text-2xl font-bold text-terracotta">{summary.food.meal_count}</p>
+                  <p className="text-xs text-brown-light">meals logged</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl font-bold text-terracotta">{summary.food.total_calories}</p>
+                  <p className="text-xs text-brown-light">/ {summary.goals.calorie_goal} cal</p>
+                </>
+              )}
             </div>
             <div className="text-center">
               <p className="text-2xl font-bold text-sage">{summary.exercise.total_minutes}</p>

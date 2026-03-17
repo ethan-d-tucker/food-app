@@ -60,10 +60,13 @@ export function getNutritionQuality(protein: number, fiber: number, calories: nu
   return clamp(quality, 0.5, 1.5);
 }
 
-export function applyFood(stats: PetStats, calories: number, protein: number, fiber: number): PetStats {
-  const quality = getNutritionQuality(protein, fiber, calories);
+export function applyFood(stats: PetStats, calories: number, protein: number, fiber: number, trackingMode: 'casual' | 'structured' = 'structured'): PetStats {
+  const quality = trackingMode === 'casual' ? 1.0 : getNutritionQuality(protein, fiber, calories);
   let points: number;
-  if (calories < 200) points = 7;
+  if (trackingMode === 'casual') {
+    // In casual mode, just logging any food gives a decent boost
+    points = 20;
+  } else if (calories < 200) points = 7;
   else if (calories < 500) points = 18;
   else if (calories < 800) points = 28;
   else points = 35;

@@ -2,19 +2,95 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../stores/appStore';
 import { commonFoods, type FoodItem } from '../data/foods';
-import { Plus, Search, X, Trash2 } from 'lucide-react';
+import { api } from '../lib/api';
+import { useDebounce } from '../hooks/useDebounce';
+import BarcodeScanner from '../components/food/BarcodeScanner';
+import { Plus, Search, X, Trash2, ScanBarcode, Loader2 } from 'lucide-react';
+
+type FoodTab = 'quick' | 'search' | 'scan';
+
+interface SearchFood {
+  name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  barcode: string;
+  image_url: string;
+  serving_size: string;
+}
+
+function FoodCard({ food, selected, onClick }: { food: { name: string; calories: number; protein: number; carbs: number; fat: number }; selected: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left p-3 rounded-xl transition-colors btn-press ${
+        selected ? 'bg-terracotta/10 border-2 border-terracotta' : 'bg-white border-2 border-transparent'
+      }`}
+    >
+      <div className="flex justify-between items-center">
+        <span className="font-medium text-brown text-sm">{food.name}</span>
+        <span className="text-terracotta font-bold text-sm">{food.calories} cal</span>
+      </div>
+      <div className="flex gap-3 mt-1 text-xs text-brown-light">
+        <span>P: {food.protein}g</span>
+        <span>C: {food.carbs}g</span>
+        <span>F: {food.fat}g</span>
+      </div>
+    </button>
+  );
+}
 
 function AddFoodModal({ onClose }: { onClose: () => void }) {
   const { addFood } = useAppStore();
-  const [search, setSearch] = useState('');
-  const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
+  const [tab, setTab] = useState<FoodTab>('quick');
+  const [quickSearch, setQuickSearch] = useState('');
+  const [apiSearch, setApiSearch] = useState('');
+  const [apiResults, setApiResults] = useState<SearchFood[]>([]);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [selectedFood, setSelectedFood] = useState<{ name: string; calories: number; protein: number; carbs: number; fat: number; fiber: number } | null>(null);
   const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
   const [customMode, setCustomMode] = useState(false);
   const [custom, setCustom] = useState({ name: '', calories: '', protein: '', carbs: '', fat: '', fiber: '' });
+  const [scanResult, setScanResult] = useState<SearchFood | null>(null);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanError, setScanError] = useState('');
 
-  const filtered = search.trim()
-    ? commonFoods.filter((f) => f.name.toLowerCase().includes(search.toLowerCase())).slice(0, 12)
+  const debouncedApiSearch = useDebounce(apiSearch, 300);
+
+  // API search effect
+  useEffect(() => {
+    if (!debouncedApiSearch.trim() || tab !== 'search') {
+      setApiResults([]);
+      return;
+    }
+    setApiLoading(true);
+    api.searchFood(debouncedApiSearch).then((results) => {
+      setApiResults(results);
+      setApiLoading(false);
+    }).catch(() => {
+      setApiResults([]);
+      setApiLoading(false);
+    });
+  }, [debouncedApiSearch, tab]);
+
+  const filtered = quickSearch.trim()
+    ? commonFoods.filter((f) => f.name.toLowerCase().includes(quickSearch.toLowerCase())).slice(0, 12)
     : commonFoods.slice(0, 12);
+
+  const handleBarcodeScan = async (barcode: string) => {
+    setScanLoading(true);
+    setScanError('');
+    try {
+      const result = await api.lookupBarcode(barcode);
+      setScanResult(result);
+      setSelectedFood(result);
+    } catch {
+      setScanError('Product not found. Try searching by name instead.');
+    }
+    setScanLoading(false);
+  };
 
   const handleAdd = async () => {
     if (customMode) {
@@ -80,23 +156,140 @@ function AddFoodModal({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        {/* Toggle custom/search */}
-        <div className="flex gap-2 mb-4">
-          <button
-            onClick={() => setCustomMode(false)}
-            className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${!customMode ? 'bg-white shadow-sm text-brown' : 'text-brown-light'}`}
-          >
-            Quick Add
-          </button>
-          <button
-            onClick={() => setCustomMode(true)}
-            className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${customMode ? 'bg-white shadow-sm text-brown' : 'text-brown-light'}`}
-          >
-            Custom
-          </button>
+        {/* Tab switcher */}
+        <div className="flex gap-1 mb-4 bg-cream-dark rounded-xl p-1">
+          {([
+            { id: 'quick' as FoodTab, label: 'Quick Add' },
+            { id: 'search' as FoodTab, label: 'Search' },
+            { id: 'scan' as FoodTab, label: 'Scan', icon: <ScanBarcode size={14} /> },
+          ]).map((t) => (
+            <button
+              key={t.id}
+              onClick={() => { setTab(t.id); setSelectedFood(null); setCustomMode(false); }}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1 ${
+                tab === t.id ? 'bg-white shadow-sm text-brown' : 'text-brown-light'
+              }`}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        {customMode ? (
+        {/* Tab content */}
+        {tab === 'quick' && !customMode && (
+          <>
+            <div className="relative mb-3">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-brown-light" />
+              <input
+                type="text" value={quickSearch} onChange={(e) => setQuickSearch(e.target.value)}
+                placeholder="Search common foods..." autoFocus
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-white border-2 border-cream-dark focus:border-terracotta outline-none text-brown"
+              />
+            </div>
+            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+              {filtered.map((food) => (
+                <FoodCard
+                  key={food.name}
+                  food={food}
+                  selected={selectedFood?.name === food.name}
+                  onClick={() => setSelectedFood(selectedFood?.name === food.name ? null : food)}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {tab === 'search' && !customMode && (
+          <>
+            <div className="relative mb-3">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-brown-light" />
+              <input
+                type="text" value={apiSearch} onChange={(e) => setApiSearch(e.target.value)}
+                placeholder="Search any food..." autoFocus
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-white border-2 border-cream-dark focus:border-terracotta outline-none text-brown"
+              />
+            </div>
+            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+              {apiLoading && (
+                <div className="text-center py-6">
+                  <Loader2 size={24} className="mx-auto text-terracotta animate-spin" />
+                  <p className="text-xs text-brown-light mt-2">Searching...</p>
+                </div>
+              )}
+              {!apiLoading && apiResults.length === 0 && debouncedApiSearch.trim() && (
+                <div className="text-center py-6">
+                  <p className="text-sm text-brown-light">No results found</p>
+                  <button onClick={() => setCustomMode(true)} className="text-xs text-terracotta mt-1 btn-press">
+                    Enter custom food instead
+                  </button>
+                </div>
+              )}
+              {!apiLoading && apiResults.map((food, i) => (
+                <FoodCard
+                  key={`${food.barcode || food.name}-${i}`}
+                  food={food}
+                  selected={selectedFood?.name === food.name}
+                  onClick={() => setSelectedFood(selectedFood?.name === food.name ? null : food)}
+                />
+              ))}
+              {!apiLoading && !debouncedApiSearch.trim() && (
+                <div className="text-center py-6">
+                  <Search size={28} className="mx-auto text-brown-light/30 mb-2" />
+                  <p className="text-sm text-brown-light">Search for any food</p>
+                  <p className="text-xs text-brown-light mt-1">Powered by Open Food Facts</p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {tab === 'scan' && !customMode && (
+          <>
+            {scanResult ? (
+              <div className="space-y-3">
+                <div className="bg-white rounded-xl p-4">
+                  <p className="font-medium text-brown">{scanResult.name}</p>
+                  <p className="text-xs text-brown-light mt-1">{scanResult.serving_size}</p>
+                  <div className="flex gap-3 mt-2 text-sm">
+                    <span className="text-terracotta font-bold">{scanResult.calories} cal</span>
+                    <span className="text-brown-light">P: {scanResult.protein}g</span>
+                    <span className="text-brown-light">C: {scanResult.carbs}g</span>
+                    <span className="text-brown-light">F: {scanResult.fat}g</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setScanResult(null); setSelectedFood(null); }}
+                  className="text-xs text-terracotta btn-press"
+                >
+                  Scan another
+                </button>
+              </div>
+            ) : scanLoading ? (
+              <div className="text-center py-8">
+                <Loader2 size={28} className="mx-auto text-terracotta animate-spin" />
+                <p className="text-sm text-brown-light mt-2">Looking up product...</p>
+              </div>
+            ) : (
+              <>
+                <BarcodeScanner
+                  onScan={handleBarcodeScan}
+                  onError={() => {}}
+                />
+                {scanError && (
+                  <div className="text-center mt-3">
+                    <p className="text-sm text-terracotta">{scanError}</p>
+                    <button onClick={() => { setTab('search'); setScanError(''); }} className="text-xs text-brown-light mt-1 btn-press underline">
+                      Try searching instead
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {customMode && (
           <div className="space-y-3">
             <input
               type="text" value={custom.name} onChange={(e) => setCustom({ ...custom, name: e.target.value })}
@@ -112,42 +305,17 @@ function AddFoodModal({ onClose }: { onClose: () => void }) {
               <input type="number" value={custom.fat} onChange={(e) => setCustom({ ...custom, fat: e.target.value })}
                 placeholder="Fat (g)" className="px-4 py-3 rounded-xl bg-white border-2 border-cream-dark focus:border-terracotta outline-none text-brown" />
             </div>
+            <button onClick={() => setCustomMode(false)} className="text-xs text-terracotta btn-press">
+              Back to {tab === 'quick' ? 'Quick Add' : tab === 'search' ? 'Search' : 'Scan'}
+            </button>
           </div>
-        ) : (
-          <>
-            {/* Search */}
-            <div className="relative mb-3">
-              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-brown-light" />
-              <input
-                type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search foods..." autoFocus
-                className="w-full pl-10 pr-4 py-3 rounded-xl bg-white border-2 border-cream-dark focus:border-terracotta outline-none text-brown"
-              />
-            </div>
+        )}
 
-            {/* Food list */}
-            <div className="space-y-2 max-h-[300px] overflow-y-auto">
-              {filtered.map((food) => (
-                <button
-                  key={food.name}
-                  onClick={() => setSelectedFood(selectedFood?.name === food.name ? null : food)}
-                  className={`w-full text-left p-3 rounded-xl transition-colors btn-press ${
-                    selectedFood?.name === food.name ? 'bg-terracotta/10 border-2 border-terracotta' : 'bg-white border-2 border-transparent'
-                  }`}
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium text-brown text-sm">{food.name}</span>
-                    <span className="text-terracotta font-bold text-sm">{food.calories} cal</span>
-                  </div>
-                  <div className="flex gap-3 mt-1 text-xs text-brown-light">
-                    <span>P: {food.protein}g</span>
-                    <span>C: {food.carbs}g</span>
-                    <span>F: {food.fat}g</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </>
+        {/* Custom entry link (when not in custom mode) */}
+        {!customMode && tab !== 'scan' && (
+          <button onClick={() => setCustomMode(true)} className="block mx-auto mt-3 text-xs text-brown-light btn-press">
+            or enter custom food
+          </button>
         )}
 
         <button
@@ -184,38 +352,54 @@ export default function FoodPage() {
       {/* Daily Summary */}
       {summary && (
         <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-          <div className="flex justify-between items-end mb-2">
-            <span className="text-sm text-brown-light">Today's Calories</span>
-            <span className="text-xs text-brown-light">{summary.goals.calorie_goal} goal</span>
-          </div>
-          <div className="h-4 bg-cream-dark rounded-full overflow-hidden mb-3">
-            <motion.div
-              className="h-full rounded-full"
-              style={{
-                backgroundColor: summary.food.total_calories > summary.goals.calorie_goal ? '#E07A5F' : '#81B29A',
-              }}
-              animate={{ width: `${Math.min((summary.food.total_calories / summary.goals.calorie_goal) * 100, 100)}%` }}
-              transition={{ type: 'spring', stiffness: 100 }}
-            />
-          </div>
-          <div className="grid grid-cols-4 gap-2 text-center">
-            <div>
-              <p className="text-lg font-bold text-terracotta">{summary.food.total_calories}</p>
-              <p className="text-[10px] text-brown-light">Calories</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold text-sage">{Math.round(summary.food.total_protein)}g</p>
-              <p className="text-[10px] text-brown-light">Protein</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold text-mustard">{Math.round(summary.food.total_carbs)}g</p>
-              <p className="text-[10px] text-brown-light">Carbs</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold text-brown-light">{Math.round(summary.food.total_fat)}g</p>
-              <p className="text-[10px] text-brown-light">Fat</p>
-            </div>
-          </div>
+          {summary.goals.tracking_mode === 'casual' ? (
+            <>
+              <div className="flex justify-between items-end mb-2">
+                <span className="text-sm text-brown-light">Meals Logged Today</span>
+              </div>
+              <div className="text-center py-2">
+                <p className="text-3xl font-bold text-terracotta">{summary.food.meal_count}</p>
+                <p className="text-xs text-brown-light mt-1">
+                  {summary.food.total_calories > 0 && `${summary.food.total_calories} calories total`}
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex justify-between items-end mb-2">
+                <span className="text-sm text-brown-light">Today's Calories</span>
+                <span className="text-xs text-brown-light">{summary.goals.calorie_goal} goal</span>
+              </div>
+              <div className="h-4 bg-cream-dark rounded-full overflow-hidden mb-3">
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{
+                    backgroundColor: summary.food.total_calories > summary.goals.calorie_goal ? '#E07A5F' : '#81B29A',
+                  }}
+                  animate={{ width: `${Math.min((summary.food.total_calories / summary.goals.calorie_goal) * 100, 100)}%` }}
+                  transition={{ type: 'spring', stiffness: 100 }}
+                />
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-center">
+                <div>
+                  <p className="text-lg font-bold text-terracotta">{summary.food.total_calories}</p>
+                  <p className="text-[10px] text-brown-light">Calories</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-sage">{Math.round(summary.food.total_protein)}g</p>
+                  <p className="text-[10px] text-brown-light">Protein</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-mustard">{Math.round(summary.food.total_carbs)}g</p>
+                  <p className="text-[10px] text-brown-light">Carbs</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-brown-light">{Math.round(summary.food.total_fat)}g</p>
+                  <p className="text-[10px] text-brown-light">Fat</p>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 

@@ -34,4 +34,26 @@ export const api = {
   // Summary
   getSummary: (profileId: string, date?: string) =>
     request<any>(`/profiles/${profileId}/summary${date ? `?date=${date}` : ''}`),
+
+  // Settings
+  getSettings: (profileId: string) => request<any>(`/profiles/${profileId}/settings`),
+  updateSettings: (profileId: string, data: any) =>
+    request<any>(`/profiles/${profileId}/settings`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Food search (Open Food Facts)
+  searchFood: (query: string) => request<any[]>(`/food-search?q=${encodeURIComponent(query)}`),
+  lookupBarcode: (barcode: string) => request<any>(`/food-barcode/${barcode}`),
+
+  // Exercise import
+  importExercise: (profileId: string, data: any) =>
+    request<any>(`/profiles/${profileId}/exercise/import/health-auto-export`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Notifications
+  testNotification: (profileId: string) =>
+    request<any>(`/profiles/${profileId}/notifications/test`, { method: 'POST' }),
+
+  // App blocker
+  getFoodStatus: (profileId: string) => request<any>(`/profiles/${profileId}/food-status`),
+  bypassBlocker: (profileId: string) =>
+    request<any>(`/profiles/${profileId}/food-status/bypass`, { method: 'POST' }),
 };

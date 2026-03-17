@@ -4,6 +4,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import db from './database.js';
 import { calculateDecay, applyFood, applyExercise, applyPetting, deriveMood } from './pet-engine.js';
+import { searchFoods, lookupBarcode as lookupBarcodeAPI } from './open-food-facts.js';
+import { sendNotification, startNotificationScheduler } from './notifications.js';
+import { importExerciseEntries, parseHealthAutoExport } from './exercise-import.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -67,7 +70,11 @@ app.post('/api/profiles', (req, res) => {
     'INSERT INTO pet_stats (profile_id) VALUES (?)'
   ).run(id);
 
-  const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(id);
+  db.prepare(
+    'INSERT INTO settings (profile_id, calorie_goal, exercise_goal) VALUES (?, ?, ?)'
+  ).run(id, calorie_goal || 2000, exercise_goal || 30);
+
+  const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(id) as any;
   const stats = db.prepare('SELECT * FROM pet_stats WHERE profile_id = ?').get(id) as any;
 
   res.json({
@@ -140,7 +147,9 @@ app.post('/api/profiles/:id/food', (req, res) => {
       is_exhausted: !!rawStats.is_exhausted, last_updated: rawStats.last_updated, last_petted: rawStats.last_petted,
     }, new Date());
 
-    const updated = applyFood(current, calories, protein || 0, fiber || 0);
+    const settings = db.prepare('SELECT tracking_mode FROM settings WHERE profile_id = ?').get(req.params.id) as any;
+    const trackingMode = settings?.tracking_mode || 'structured';
+    const updated = applyFood(current, calories, protein || 0, fiber || 0, trackingMode);
 
     db.prepare(`
       UPDATE pet_stats SET fullness = ?, fitness = ?, happiness = ?,
@@ -241,9 +250,142 @@ app.get('/api/profiles/:id/summary', (req, res) => {
     FROM exercise_entries WHERE profile_id = ? AND date(created_at) = ?
   `).get(req.params.id, date);
 
-  const profile = db.prepare('SELECT calorie_goal, exercise_goal FROM profiles WHERE id = ?').get(req.params.id) as any;
+  const settings = db.prepare('SELECT calorie_goal, exercise_goal, tracking_mode FROM settings WHERE profile_id = ?').get(req.params.id) as any;
+  const goals = settings || { calorie_goal: 2000, exercise_goal: 30, tracking_mode: 'casual' };
 
-  res.json({ food: foodSummary, exercise: exerciseSummary, goals: profile });
+  res.json({ food: foodSummary, exercise: exerciseSummary, goals });
+});
+
+// ─── Settings ───
+
+app.get('/api/profiles/:id/settings', (req, res) => {
+  const settings = db.prepare('SELECT * FROM settings WHERE profile_id = ?').get(req.params.id);
+  if (!settings) return res.status(404).json({ error: 'Settings not found' });
+  res.json(settings);
+});
+
+app.put('/api/profiles/:id/settings', (req, res) => {
+  const existing = db.prepare('SELECT * FROM settings WHERE profile_id = ?').get(req.params.id) as any;
+  if (!existing) return res.status(404).json({ error: 'Settings not found' });
+
+  const fields = [
+    'calorie_goal', 'exercise_goal', 'tracking_mode',
+    'protein_target', 'carbs_target', 'fat_target', 'meal_frequency',
+    'track_calories', 'track_macros', 'track_exercise',
+    'ntfy_enabled', 'ntfy_server', 'ntfy_topic', 'ntfy_pet_alerts', 'ntfy_goal_reminders',
+    'blocker_enabled', 'blocker_mode',
+  ];
+
+  const updates: string[] = [];
+  const values: any[] = [];
+  for (const field of fields) {
+    if (req.body[field] !== undefined) {
+      updates.push(`${field} = ?`);
+      values.push(req.body[field]);
+    }
+  }
+
+  if (updates.length > 0) {
+    values.push(req.params.id);
+    db.prepare(`UPDATE settings SET ${updates.join(', ')} WHERE profile_id = ?`).run(...values);
+  }
+
+  const updated = db.prepare('SELECT * FROM settings WHERE profile_id = ?').get(req.params.id);
+  res.json(updated);
+});
+
+// ─── App Blocker ───
+
+app.get('/api/profiles/:id/food-status', (req, res) => {
+  const today = new Date().toISOString().split('T')[0];
+
+  const foodCount = db.prepare(
+    "SELECT COUNT(*) as count FROM food_entries WHERE profile_id = ? AND date(created_at) = ?"
+  ).get(req.params.id, today) as any;
+
+  const lastEntry = db.prepare(
+    "SELECT created_at FROM food_entries WHERE profile_id = ? AND date(created_at) = ? ORDER BY created_at DESC LIMIT 1"
+  ).get(req.params.id, today) as any;
+
+  const bypass = db.prepare(
+    "SELECT 1 FROM blocker_bypasses WHERE profile_id = ? AND bypass_date = ?"
+  ).get(req.params.id, today);
+
+  const settings = db.prepare(
+    "SELECT blocker_enabled, blocker_mode FROM settings WHERE profile_id = ?"
+  ).get(req.params.id) as any;
+
+  res.json({
+    logged_today: foodCount.count > 0,
+    entry_count: foodCount.count,
+    last_logged_at: lastEntry?.created_at || null,
+    blocker_mode: settings?.blocker_mode || 'gentle',
+    bypass_active: !!bypass,
+    blocker_enabled: !!settings?.blocker_enabled,
+  });
+});
+
+app.post('/api/profiles/:id/food-status/bypass', (req, res) => {
+  const today = new Date().toISOString().split('T')[0];
+  db.prepare(
+    "INSERT OR IGNORE INTO blocker_bypasses (profile_id, bypass_date) VALUES (?, ?)"
+  ).run(req.params.id, today);
+  res.json({ bypassed: true, date: today });
+});
+
+// ─── Exercise Import ───
+
+app.post('/api/profiles/:id/exercise/import/health-auto-export', (req, res) => {
+  const profile = db.prepare('SELECT id FROM profiles WHERE id = ?').get(req.params.id);
+  if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+  try {
+    const entries = parseHealthAutoExport(req.body);
+    const result = importExerciseEntries(req.params.id, entries);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: 'Import failed', details: err.message });
+  }
+});
+
+// ─── Notifications ───
+
+app.post('/api/profiles/:id/notifications/test', async (req, res) => {
+  const settings = db.prepare('SELECT ntfy_server, ntfy_topic FROM settings WHERE profile_id = ?').get(req.params.id) as any;
+  if (!settings || !settings.ntfy_topic) return res.status(400).json({ error: 'ntfy not configured' });
+
+  const success = await sendNotification(
+    settings.ntfy_server,
+    settings.ntfy_topic,
+    '🐾 Test from Critter!',
+    'Notifications are working! Your pet says hi!',
+    3,
+  );
+
+  res.json({ success });
+});
+
+// ─── Food Search (Open Food Facts) ───
+
+app.get('/api/food-search', async (req, res) => {
+  const query = req.query.q as string;
+  if (!query) return res.json([]);
+  try {
+    const results = await searchFoods(query);
+    res.json(results);
+  } catch {
+    res.json([]);
+  }
+});
+
+app.get('/api/food-barcode/:barcode', async (req, res) => {
+  try {
+    const result = await lookupBarcodeAPI(req.params.barcode);
+    if (!result) return res.status(404).json({ error: 'Product not found' });
+    res.json(result);
+  } catch {
+    res.status(500).json({ error: 'Lookup failed' });
+  }
 });
 
 // SPA fallback
@@ -253,4 +395,5 @@ app.get('/{*splat}', (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Food app server running on port ${PORT}`);
+  startNotificationScheduler();
 });

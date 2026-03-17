@@ -63,6 +63,50 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_food_profile_date ON food_entries(profile_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_exercise_profile_date ON exercise_entries(profile_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS settings (
+    profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+    calorie_goal INTEGER NOT NULL DEFAULT 2000,
+    exercise_goal INTEGER NOT NULL DEFAULT 30,
+    tracking_mode TEXT NOT NULL DEFAULT 'casual' CHECK(tracking_mode IN ('casual', 'structured')),
+    protein_target INTEGER NOT NULL DEFAULT 0,
+    carbs_target INTEGER NOT NULL DEFAULT 0,
+    fat_target INTEGER NOT NULL DEFAULT 0,
+    meal_frequency INTEGER NOT NULL DEFAULT 3,
+    track_calories INTEGER NOT NULL DEFAULT 1,
+    track_macros INTEGER NOT NULL DEFAULT 0,
+    track_exercise INTEGER NOT NULL DEFAULT 1,
+    ntfy_enabled INTEGER NOT NULL DEFAULT 0,
+    ntfy_server TEXT NOT NULL DEFAULT 'https://ntfy.sh',
+    ntfy_topic TEXT NOT NULL DEFAULT '',
+    ntfy_pet_alerts INTEGER NOT NULL DEFAULT 1,
+    ntfy_goal_reminders INTEGER NOT NULL DEFAULT 0,
+    blocker_enabled INTEGER NOT NULL DEFAULT 0,
+    blocker_mode TEXT NOT NULL DEFAULT 'gentle' CHECK(blocker_mode IN ('gentle', 'hard'))
+  );
+
+  CREATE TABLE IF NOT EXISTS blocker_bypasses (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    bypass_date TEXT NOT NULL,
+    PRIMARY KEY (profile_id, bypass_date)
+  );
 `);
+
+// Migrate existing profiles that don't have settings rows
+const profilesWithoutSettings = db.prepare(`
+  SELECT p.id, p.calorie_goal, p.exercise_goal FROM profiles p
+  LEFT JOIN settings s ON p.id = s.profile_id
+  WHERE s.profile_id IS NULL
+`).all() as any[];
+
+for (const p of profilesWithoutSettings) {
+  db.prepare('INSERT INTO settings (profile_id, calorie_goal, exercise_goal) VALUES (?, ?, ?)').run(p.id, p.calorie_goal, p.exercise_goal);
+}
+
+// Add source column to exercise_entries if it doesn't exist
+const exerciseCols = db.prepare("PRAGMA table_info(exercise_entries)").all() as any[];
+if (!exerciseCols.find((c: any) => c.name === 'source')) {
+  db.prepare("ALTER TABLE exercise_entries ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'").run();
+}
 
 export default db;

@@ -46,10 +46,31 @@ export interface ExerciseEntry {
   created_at: string;
 }
 
+export interface Settings {
+  profile_id: string;
+  calorie_goal: number;
+  exercise_goal: number;
+  tracking_mode: 'casual' | 'structured';
+  protein_target: number;
+  carbs_target: number;
+  fat_target: number;
+  meal_frequency: number;
+  track_calories: number;
+  track_macros: number;
+  track_exercise: number;
+  ntfy_enabled: number;
+  ntfy_server: string;
+  ntfy_topic: string;
+  ntfy_pet_alerts: number;
+  ntfy_goal_reminders: number;
+  blocker_enabled: number;
+  blocker_mode: 'gentle' | 'hard';
+}
+
 interface DailySummary {
   food: { meal_count: number; total_calories: number; total_protein: number; total_carbs: number; total_fat: number; total_fiber: number };
   exercise: { exercise_count: number; total_minutes: number; total_burned: number };
-  goals: { calorie_goal: number; exercise_goal: number };
+  goals: { calorie_goal: number; exercise_goal: number; tracking_mode: string };
 }
 
 type Page = 'home' | 'food' | 'exercise' | 'settings' | 'onboarding';
@@ -61,6 +82,7 @@ interface AppState {
   foodEntries: FoodEntry[];
   exerciseEntries: ExerciseEntry[];
   summary: DailySummary | null;
+  settings: Settings | null;
   loading: boolean;
   petReaction: { type: 'food' | 'exercise' | 'pet'; mood: string } | null;
 
@@ -76,6 +98,8 @@ interface AppState {
   addExercise: (data: any) => Promise<void>;
   deleteExercise: (id: string) => Promise<void>;
   loadSummary: (date?: string) => Promise<void>;
+  loadSettings: () => Promise<void>;
+  updateSettings: (data: Partial<Settings>) => Promise<void>;
   clearReaction: () => void;
 }
 
@@ -86,6 +110,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   foodEntries: [],
   exerciseEntries: [],
   summary: null,
+  settings: null,
   loading: true,
   petReaction: null,
 
@@ -185,6 +210,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!activeProfileId) return;
     const summary = await api.getSummary(activeProfileId, date);
     set({ summary });
+  },
+
+  loadSettings: async () => {
+    const { activeProfileId } = get();
+    if (!activeProfileId) return;
+    try {
+      const settings = await api.getSettings(activeProfileId);
+      set({ settings });
+    } catch {
+      set({ settings: null });
+    }
+  },
+
+  updateSettings: async (data) => {
+    const { activeProfileId } = get();
+    if (!activeProfileId) return;
+    const updated = await api.updateSettings(activeProfileId, data);
+    set({ settings: updated });
   },
 
   clearReaction: () => set({ petReaction: null }),
