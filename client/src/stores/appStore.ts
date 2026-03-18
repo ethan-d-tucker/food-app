@@ -82,6 +82,7 @@ interface DailySummary {
   food: { meal_count: number; total_calories: number; total_protein: number; total_carbs: number; total_fat: number; total_fiber: number };
   exercise: { exercise_count: number; total_minutes: number; total_burned: number };
   goals: { calorie_goal: number; exercise_goal: number; tracking_mode: string };
+  activity: { active_energy?: number; resting_energy?: number; step_count?: number };
 }
 
 export interface CalendarDay {

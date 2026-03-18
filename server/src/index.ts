@@ -8,7 +8,7 @@ import { checkAchievements, getProfileAchievements } from './achievements.js';
 import { getAccessories, getEquipped, equipAccessory } from './accessories.js';
 import { searchFoods, lookupBarcode as lookupBarcodeAPI } from './open-food-facts.js';
 import { sendNotification, startNotificationScheduler } from './notifications.js';
-import { importExerciseEntries, parseHealthAutoExport } from './exercise-import.js';
+import { importExerciseEntries, importActivityMetrics, parseHealthAutoExport } from './exercise-import.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -417,7 +417,16 @@ app.get('/api/profiles/:id/summary', (req, res) => {
   const settings = db.prepare('SELECT calorie_goal, exercise_goal, tracking_mode FROM settings WHERE profile_id = ?').get(req.params.id) as any;
   const goals = settings || { calorie_goal: 2000, exercise_goal: 30, tracking_mode: 'casual' };
 
-  res.json({ food: foodSummary, exercise: exerciseSummary, goals });
+  // Fetch activity metrics for the day (active calories, steps, etc.)
+  const activityRows = db.prepare(
+    'SELECT metric, value FROM activity_metrics WHERE profile_id = ? AND date = ?'
+  ).all(req.params.id, date) as any[];
+  const activity: Record<string, number> = {};
+  for (const row of activityRows) {
+    activity[row.metric] = Math.round(row.value);
+  }
+
+  res.json({ food: foodSummary, exercise: exerciseSummary, goals, activity });
 });
 
 // ─── Calendar / History ───
@@ -804,15 +813,31 @@ app.post('/api/profiles/:id/exercise/import/health-auto-export', (req, res) => {
   }
 
   try {
-    const entries = parseHealthAutoExport(req.body);
-    console.log('[Health Import] Parsed entries:', entries.length, entries.map(e => ({ name: e.name, duration: e.duration_minutes, cal: e.calories_burned })));
-    const result = importExerciseEntries(req.params.id, entries);
-    console.log('[Health Import] Result:', result);
-    res.json(result);
+    const { workouts, metrics } = parseHealthAutoExport(req.body);
+    console.log('[Health Import] Parsed workouts:', workouts.length, workouts.map(e => ({ name: e.name, duration: e.duration_minutes, cal: e.calories_burned })));
+    console.log('[Health Import] Parsed metrics:', metrics.length, metrics.map(m => ({ metric: m.metric, value: m.value })));
+    const result = importExerciseEntries(req.params.id, workouts);
+    const metricsResult = importActivityMetrics(req.params.id, metrics);
+    console.log('[Health Import] Result:', result, 'Metrics:', metricsResult);
+    res.json({ ...result, metrics_imported: metricsResult.imported });
   } catch (err: any) {
     console.error('[Health Import] Error:', err.message);
     res.status(400).json({ error: 'Import failed', details: err.message });
   }
+});
+
+// ─── Activity Metrics ───
+
+app.get('/api/profiles/:id/activity', (req, res) => {
+  const date = req.query.date as string || new Date().toISOString().split('T')[0];
+  const rows = db.prepare(
+    'SELECT metric, value, updated_at FROM activity_metrics WHERE profile_id = ? AND date = ?'
+  ).all(req.params.id, date) as any[];
+  const activity: Record<string, { value: number; updated_at: string }> = {};
+  for (const row of rows) {
+    activity[row.metric] = { value: Math.round(row.value), updated_at: row.updated_at };
+  }
+  res.json({ date, activity });
 });
 
 // ─── Notifications ───

@@ -171,16 +171,27 @@ export default function ExercisePage() {
               transition={{ type: 'spring', stiffness: 100 }}
             />
           </div>
-          <div className="grid grid-cols-2 gap-2 text-center">
+          <div className={`grid gap-2 text-center ${summary.activity?.active_energy ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <div>
               <p className="text-lg font-bold text-sage">{summary.exercise.total_minutes}</p>
               <p className="text-[10px] text-brown-light">Minutes</p>
             </div>
             <div>
               <p className="text-lg font-bold text-terracotta">{summary.exercise.total_burned}</p>
-              <p className="text-[10px] text-brown-light">Cal Burned</p>
+              <p className="text-[10px] text-brown-light">Workout Cal</p>
             </div>
+            {summary.activity?.active_energy != null && summary.activity.active_energy > 0 && (
+              <div>
+                <p className="text-lg font-bold text-mustard">{summary.activity.active_energy}</p>
+                <p className="text-[10px] text-brown-light">Active Cal</p>
+              </div>
+            )}
           </div>
+          {summary.activity?.step_count != null && summary.activity.step_count > 0 && (
+            <div className="mt-2 text-center">
+              <span className="text-xs text-brown-light">{summary.activity.step_count.toLocaleString()} steps</span>
+            </div>
+          )}
         </div>
       )}
 

@@ -286,8 +286,17 @@ export default function HomePage() {
               )}
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-sage">{summary.exercise.total_minutes}</p>
-              <p className="text-xs text-brown-light">/ {summary.goals.exercise_goal} min</p>
+              {summary.activity?.active_energy ? (
+                <>
+                  <p className="text-2xl font-bold text-sage">{summary.activity.active_energy}</p>
+                  <p className="text-xs text-brown-light">active cal</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl font-bold text-sage">{summary.exercise.total_minutes}</p>
+                  <p className="text-xs text-brown-light">/ {summary.goals.exercise_goal} min</p>
+                </>
+              )}
             </div>
           </div>
         </motion.div>

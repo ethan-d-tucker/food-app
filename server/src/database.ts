@@ -166,6 +166,20 @@ if (!foodCols.find((c: any) => c.name === 'quantity')) {
   db.prepare("ALTER TABLE food_entries ADD COLUMN serving_grams REAL").run();
 }
 
+// Add activity_metrics table for daily watch/Health data (active calories, steps, etc.)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS activity_metrics (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    value REAL NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT 'health-auto-export',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (profile_id, date, metric)
+  );
+  CREATE INDEX IF NOT EXISTS idx_activity_metrics_date ON activity_metrics(profile_id, date);
+`);
+
 // Add happiness weight settings columns
 const settingsCols = db.prepare("PRAGMA table_info(settings)").all() as any[];
 if (!settingsCols.find((c: any) => c.name === 'happiness_food')) {

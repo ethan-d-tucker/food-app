@@ -175,13 +175,40 @@ function extractQty(val: any): number {
   return Number(val) || 0;
 }
 
+export interface MetricEntry {
+  metric: string;  // e.g. 'active_energy', 'step_count', 'resting_energy'
+  value: number;
+  date: string;
+}
+
+export function importActivityMetrics(profileId: string, metrics: MetricEntry[]): { imported: number } {
+  let imported = 0;
+
+  const upsert = db.prepare(`
+    INSERT INTO activity_metrics (profile_id, date, metric, value, updated_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(profile_id, date, metric)
+    DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+  `);
+
+  for (const m of metrics) {
+    if (m.value <= 0) continue;
+    const date = m.date?.split(' ')[0] || new Date().toISOString().split('T')[0];
+    upsert.run(profileId, date, m.metric, m.value);
+    imported++;
+  }
+
+  return { imported };
+}
+
 // Parse Health Auto Export app's webhook format
-export function parseHealthAutoExport(body: any): ImportEntry[] {
+export function parseHealthAutoExport(body: any): { workouts: ImportEntry[]; metrics: MetricEntry[] } {
   // Health Auto Export sends data in various formats. Common formats:
-  // { data: { workouts: [...] } }
+  // { data: { workouts: [...], metrics: [...] } }
   // { workouts: [...] }
   // Or just an array of workouts
   const entries: ImportEntry[] = [];
+  const metricEntries: MetricEntry[] = [];
 
   const workouts = body?.data?.workouts || body?.workouts || (Array.isArray(body) ? body : [body]);
 
@@ -211,5 +238,38 @@ export function parseHealthAutoExport(body: any): ImportEntry[] {
     });
   }
 
-  return entries;
+  // Parse metrics (active energy, steps, resting energy, etc.)
+  const rawMetrics = body?.data?.metrics || body?.metrics || [];
+  // Metric name mapping from Health Auto Export names to our keys
+  const metricNameMap: Record<string, string> = {
+    'active_energy': 'active_energy',
+    'activeEnergy': 'active_energy',
+    'active_energy_burned': 'active_energy',
+    'basal_energy_burned': 'resting_energy',
+    'basalEnergyBurned': 'resting_energy',
+    'resting_energy': 'resting_energy',
+    'step_count': 'step_count',
+    'stepCount': 'step_count',
+    'steps': 'step_count',
+  };
+
+  for (const m of rawMetrics) {
+    if (!m) continue;
+    const metricKey = metricNameMap[m.name] || metricNameMap[m.type] || null;
+    if (!metricKey) continue;
+
+    // Metrics can have a data array with date/qty pairs, or a single qty
+    const dataPoints = m.data || [m];
+    for (const dp of dataPoints) {
+      const value = extractQty(dp.qty) || extractQty(dp.value) || extractQty(dp);
+      if (value <= 0) continue;
+      metricEntries.push({
+        metric: metricKey,
+        value,
+        date: dp.date || m.date || new Date().toISOString(),
+      });
+    }
+  }
+
+  return { workouts: entries, metrics: metricEntries };
 }
