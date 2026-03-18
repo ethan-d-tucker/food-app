@@ -175,6 +175,21 @@ function extractQty(val: any): number {
   return Number(val) || 0;
 }
 
+// Extract units string from Health Auto Export fields (e.g. { qty: 150, units: "kJ" })
+function extractUnits(val: any): string {
+  if (val == null) return '';
+  if (typeof val === 'object' && val.units) return val.units;
+  return '';
+}
+
+// Convert energy value to kcal based on units
+function toKcal(value: number, units: string): number {
+  const u = units.toLowerCase();
+  if (u === 'kj' || u === 'kilojoules') return Math.round(value / 4.184);
+  // Already kcal or cal
+  return Math.round(value);
+}
+
 export interface MetricEntry {
   metric: string;  // e.g. 'active_energy', 'step_count', 'resting_energy'
   value: number;
@@ -202,30 +217,32 @@ export function importActivityMetrics(profileId: string, metrics: MetricEntry[])
 }
 
 // Parse Health Auto Export app's webhook format
+// Docs: https://github.com/Lybron/health-auto-export/wiki/API-Export---JSON-Format
 export function parseHealthAutoExport(body: any): { workouts: ImportEntry[]; metrics: MetricEntry[] } {
-  // Health Auto Export sends data in various formats. Common formats:
-  // { data: { workouts: [...], metrics: [...] } }
-  // { workouts: [...] }
-  // Or just an array of workouts
   const entries: ImportEntry[] = [];
   const metricEntries: MetricEntry[] = [];
 
-  const workouts = body?.data?.workouts || body?.workouts || (Array.isArray(body) ? body : [body]);
+  // Workouts: { data: { workouts: [...] } } or { workouts: [...] }
+  // Only parse if there's an actual workouts array — don't fall back to treating whole body as a workout
+  const workouts = body?.data?.workouts || body?.workouts || (Array.isArray(body) ? body : []);
 
   for (const w of workouts) {
-    if (!w) continue;
+    if (!w || !w.name) continue; // workouts always have a name field
 
-    // Duration: seconds (from Health Auto Export) or already in minutes
+    // Duration in seconds per the docs
     const rawDuration = extractQty(w.duration);
-    // Health Auto Export sends duration in seconds; if value > 300 assume seconds
     const durationMinutes = rawDuration > 300 ? rawDuration / 60 : (w.duration_minutes || w.durationInMinutes || rawDuration);
 
-    // Calories: Health Auto Export sends as { qty: number, units: "kcal" } objects
-    const calories = extractQty(w.activeEnergy) || extractQty(w.totalEnergyBurned)
-      || extractQty(w.activeEnergyBurned) || extractQty(w.calories_burned) || 0;
+    // Energy: v2 format uses { qty, units } objects — may be kJ or kcal
+    const activeEnergyRaw = w.activeEnergyBurned || w.activeEnergy;
+    const totalEnergyRaw = w.totalEnergy || w.totalEnergyBurned;
+    const energySource = activeEnergyRaw || totalEnergyRaw;
+    const energyQty = extractQty(energySource) || extractQty(w.calories_burned) || 0;
+    const energyUnits = extractUnits(energySource);
+    const calories = toKcal(energyQty, energyUnits);
 
-    // Heart rate: may be nested object or plain number
-    const heartRate = extractQty(w.heartRateAverage) || extractQty(w.avgHeartRate)
+    // Heart rate: v2 uses avgHeartRate: { qty, units }
+    const heartRate = extractQty(w.avgHeartRate) || extractQty(w.heartRateAverage)
       || extractQty(w.heart_rate_avg) || undefined;
 
     entries.push({
@@ -238,9 +255,10 @@ export function parseHealthAutoExport(body: any): { workouts: ImportEntry[]; met
     });
   }
 
-  // Parse metrics (active energy, steps, resting energy, etc.)
+  // Parse metrics: { data: { metrics: [...] } }
+  // Each metric: { name: "active_energy", units: "kJ", data: [{ qty, date }] }
   const rawMetrics = body?.data?.metrics || body?.metrics || [];
-  // Metric name mapping from Health Auto Export names to our keys
+
   const metricNameMap: Record<string, string> = {
     'active_energy': 'active_energy',
     'activeEnergy': 'active_energy',
@@ -253,16 +271,25 @@ export function parseHealthAutoExport(body: any): { workouts: ImportEntry[]; met
     'steps': 'step_count',
   };
 
+  // Metrics whose values are energy and may need kJ→kcal conversion
+  const energyMetrics = new Set(['active_energy', 'resting_energy']);
+
   for (const m of rawMetrics) {
     if (!m) continue;
     const metricKey = metricNameMap[m.name] || metricNameMap[m.type] || null;
     if (!metricKey) continue;
 
-    // Metrics can have a data array with date/qty pairs, or a single qty
+    const units = m.units || '';
     const dataPoints = m.data || [m];
     for (const dp of dataPoints) {
-      const value = extractQty(dp.qty) || extractQty(dp.value) || extractQty(dp);
+      let value = extractQty(dp.qty) || extractQty(dp.value) || extractQty(dp);
       if (value <= 0) continue;
+
+      // Convert kJ to kcal for energy metrics
+      if (energyMetrics.has(metricKey)) {
+        value = toKcal(value, units);
+      }
+
       metricEntries.push({
         metric: metricKey,
         value,
