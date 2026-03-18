@@ -15,6 +15,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3003;
 
+// ─── Date Helper ───
+// Server runs in UTC but we need local dates (CST/CDT = America/Chicago)
+function localToday(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }); // YYYY-MM-DD
+}
+
 // ─── Happiness Weights Helper ───
 
 function getWeights(profileId: string): HappinessWeights {
@@ -26,7 +32,7 @@ function getWeights(profileId: string): HappinessWeights {
 // ─── Streak Helper ───
 
 function updateStreak(profileId: string) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localToday();
   const streak = db.prepare('SELECT * FROM streaks WHERE profile_id = ?').get(profileId) as any;
 
   if (!streak) {
@@ -73,7 +79,7 @@ function awardXp(profileId: string, xpGained: number): { xp: number; level: numb
 }
 
 function isFirstLogToday(profileId: string, table: 'food_entries' | 'exercise_entries'): boolean {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localToday();
   const count = db.prepare(`SELECT COUNT(*) as c FROM ${table} WHERE profile_id = ? AND date(created_at) = ?`).get(profileId, today) as any;
   return count.c <= 1; // <= 1 because the current entry was just inserted
 }
@@ -231,7 +237,7 @@ app.post('/api/profiles/:id/pet', (req, res) => {
 // ─── Food Entries ───
 
 app.get('/api/profiles/:id/food', (req, res) => {
-  const date = req.query.date as string || new Date().toISOString().split('T')[0];
+  const date = req.query.date as string || localToday();
   const entries = db.prepare(`
     SELECT *,
       ROUND(calories * quantity) as display_calories,
@@ -327,7 +333,7 @@ app.delete('/api/food/:id', (req, res) => {
 // ─── Exercise Entries ───
 
 app.get('/api/profiles/:id/exercise', (req, res) => {
-  const date = req.query.date as string || new Date().toISOString().split('T')[0];
+  const date = req.query.date as string || localToday();
   const entries = db.prepare(
     "SELECT * FROM exercise_entries WHERE profile_id = ? AND date(created_at) = ? ORDER BY created_at DESC"
   ).all(req.params.id, date);
@@ -394,7 +400,7 @@ app.delete('/api/exercise/:id', (req, res) => {
 // ─── Daily Summary ───
 
 app.get('/api/profiles/:id/summary', (req, res) => {
-  const date = req.query.date as string || new Date().toISOString().split('T')[0];
+  const date = req.query.date as string || localToday();
 
   const foodSummary = db.prepare(`
     SELECT
@@ -588,7 +594,7 @@ app.put('/api/profiles/:id/accessories/equip', (req, res) => {
 // ─── Checklists ───
 
 app.get('/api/profiles/:id/checklist', (req, res) => {
-  const date = req.query.date as string || new Date().toISOString().split('T')[0];
+  const date = req.query.date as string || localToday();
   const dayOfWeek = new Date(date + 'T12:00:00').getDay().toString(); // 0=Sun
 
   // Get all non-archived items for this profile
@@ -599,7 +605,7 @@ app.get('/api/profiles/:id/checklist', (req, res) => {
   // Filter to items applicable on this date
   const applicable = items.filter(item => {
     if (item.recurrence === 'once') {
-      return item.scheduled_date === date || (!item.scheduled_date && date === new Date().toISOString().split('T')[0]);
+      return item.scheduled_date === date || (!item.scheduled_date && date === localToday());
     }
     if (item.recurrence === 'daily') return true;
     if (item.recurrence === 'weekly') {
@@ -659,7 +665,7 @@ app.delete('/api/checklist/:id', (req, res) => {
 });
 
 app.post('/api/checklist/:id/complete', (req, res) => {
-  const date = req.query.date as string || new Date().toISOString().split('T')[0];
+  const date = req.query.date as string || localToday();
   const item = db.prepare('SELECT * FROM checklist_items WHERE id = ?').get(req.params.id) as any;
   if (!item) return res.status(404).json({ error: 'Item not found' });
 
@@ -709,7 +715,7 @@ app.post('/api/checklist/:id/complete', (req, res) => {
 });
 
 app.delete('/api/checklist/:id/complete', (req, res) => {
-  const date = req.query.date as string || new Date().toISOString().split('T')[0];
+  const date = req.query.date as string || localToday();
   db.prepare('DELETE FROM checklist_completions WHERE item_id = ? AND completed_date = ?').run(req.params.id, date);
 
   // Un-archive if it was a one-time item
@@ -759,7 +765,7 @@ app.put('/api/profiles/:id/settings', (req, res) => {
 // ─── App Blocker ───
 
 app.get('/api/profiles/:id/food-status', (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localToday();
 
   const foodCount = db.prepare(
     "SELECT COUNT(*) as count FROM food_entries WHERE profile_id = ? AND date(created_at) = ?"
@@ -788,7 +794,7 @@ app.get('/api/profiles/:id/food-status', (req, res) => {
 });
 
 app.post('/api/profiles/:id/food-status/bypass', (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localToday();
   db.prepare(
     "INSERT OR IGNORE INTO blocker_bypasses (profile_id, bypass_date) VALUES (?, ?)"
   ).run(req.params.id, today);
@@ -845,7 +851,7 @@ app.post('/api/profiles/:id/exercise/import/health-auto-export', (req, res) => {
 // ─── Activity Metrics ───
 
 app.get('/api/profiles/:id/activity', (req, res) => {
-  const date = req.query.date as string || new Date().toISOString().split('T')[0];
+  const date = req.query.date as string || localToday();
   const rows = db.prepare(
     'SELECT metric, value, updated_at FROM activity_metrics WHERE profile_id = ? AND date = ?'
   ).all(req.params.id, date) as any[];
