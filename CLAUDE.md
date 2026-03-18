@@ -8,7 +8,8 @@ A mobile-first web app where users track food and exercise, with virtual pets wh
 - **Backend**: Express 5, better-sqlite3 (SQLite WAL mode), Zod validation
 - **Runtime**: Node.js with tsx (TypeScript executor)
 - **Barcode scanning**: html5-qrcode
-- **Food database**: Open Food Facts API (free, no key needed, server-side cached 10min)
+- **Food search**: USDA FoodData Central API (free, DEMO_KEY, server-side cached 10min)
+- **Barcode lookup**: Open Food Facts API (free, no key needed, server-side cached 10min)
 - **Notifications**: ntfy (push notifications)
 
 ## Project Structure
@@ -28,7 +29,7 @@ A mobile-first web app where users track food and exercise, with virtual pets wh
   /src/pet-engine.ts  - Pet stat calculations, XP/leveling formulas
   /src/achievements.ts - Achievement definitions & unlock checks
   /src/accessories.ts  - Wardrobe items & equip logic
-  /src/open-food-facts.ts  - Open Food Facts API proxy (in-memory cache, 10min TTL)
+  /src/food-search.ts      - USDA search + Open Food Facts barcode lookup (cached 10min)
   /src/notifications.ts    - ntfy integration & scheduler
   /src/exercise-import.ts  - Health Auto Export webhook handler
   /data           - SQLite database file (gitignored)

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -6,7 +7,7 @@ import db from './database.js';
 import { calculateDecay, applyFood, applyExercise, applyPetting, deriveMood, calculateLevel, calculateFoodXp, calculateExerciseXp, calculateStreakXp, xpToNextLevel, type HappinessWeights } from './pet-engine.js';
 import { checkAchievements, getProfileAchievements } from './achievements.js';
 import { getAccessories, getEquipped, equipAccessory } from './accessories.js';
-import { searchFoods, lookupBarcode as lookupBarcodeAPI } from './open-food-facts.js';
+import { searchFoods, lookupBarcode as lookupBarcodeAPI } from './food-search.js';
 import { sendNotification, startNotificationScheduler } from './notifications.js';
 import { importExerciseEntries, importActivityMetrics, parseHealthAutoExport } from './exercise-import.js';
 
@@ -796,15 +797,27 @@ app.post('/api/profiles/:id/food-status/bypass', (req, res) => {
 
 // ─── Exercise Import ───
 
+// Store last webhook payload for debugging
+let lastWebhookPayload: { timestamp: string; profileId: string; body: any; result?: any; error?: string } | null = null;
+
 // GET endpoint to verify the webhook URL is reachable
 app.get('/api/profiles/:id/exercise/import/health-auto-export', (req, res) => {
   const profile = db.prepare('SELECT id FROM profiles WHERE id = ?').get(req.params.id);
   res.json({ ok: true, profile_found: !!profile, message: 'Webhook URL is reachable. Send a POST request with workout data.' });
 });
 
+// Debug endpoint: see last webhook payload and parse result
+app.get('/api/debug/last-webhook', (_req, res) => {
+  res.json(lastWebhookPayload || { message: 'No webhook received yet since last server restart' });
+});
+
 app.post('/api/profiles/:id/exercise/import/health-auto-export', (req, res) => {
   console.log('[Health Import] Received webhook for profile:', req.params.id);
-  console.log('[Health Import] Body:', JSON.stringify(req.body).slice(0, 1000));
+  console.log('[Health Import] Body:', JSON.stringify(req.body).slice(0, 2000));
+  console.log('[Health Import] Top-level keys:', Object.keys(req.body || {}));
+  if (req.body?.data) console.log('[Health Import] data keys:', Object.keys(req.body.data));
+
+  lastWebhookPayload = { timestamp: new Date().toISOString(), profileId: req.params.id, body: req.body };
 
   const profile = db.prepare('SELECT id FROM profiles WHERE id = ?').get(req.params.id);
   if (!profile) {
@@ -818,10 +831,13 @@ app.post('/api/profiles/:id/exercise/import/health-auto-export', (req, res) => {
     console.log('[Health Import] Parsed metrics:', metrics.length, metrics.map(m => ({ metric: m.metric, value: m.value })));
     const result = importExerciseEntries(req.params.id, workouts);
     const metricsResult = importActivityMetrics(req.params.id, metrics);
-    console.log('[Health Import] Result:', result, 'Metrics:', metricsResult);
-    res.json({ ...result, metrics_imported: metricsResult.imported });
+    const response = { ...result, metrics_imported: metricsResult.imported };
+    lastWebhookPayload!.result = { workouts_parsed: workouts.length, metrics_parsed: metrics.length, ...response };
+    console.log('[Health Import] Result:', response);
+    res.json(response);
   } catch (err: any) {
     console.error('[Health Import] Error:', err.message);
+    if (lastWebhookPayload) lastWebhookPayload.error = err.message;
     res.status(400).json({ error: 'Import failed', details: err.message });
   }
 });
