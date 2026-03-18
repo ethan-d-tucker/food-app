@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../stores/appStore';
 import { commonExercises, type ExerciseItem } from '../data/exercises';
-import { Plus, Search, X, Trash2 } from 'lucide-react';
+import { Plus, Search, X, Trash2, Watch, Heart, Footprints, Flame, Route, ArrowUpFromDot } from 'lucide-react';
 
 function AddExerciseModal({ onClose }: { onClose: () => void }) {
   const { addExercise } = useAppStore();
@@ -167,32 +167,79 @@ export default function ExercisePage() {
           <div className="h-4 bg-cream-dark rounded-full overflow-hidden mb-3">
             <motion.div
               className="h-full rounded-full bg-sage"
-              animate={{ width: `${Math.min((summary.exercise.total_minutes / summary.goals.exercise_goal) * 100, 100)}%` }}
+              animate={{ width: `${Math.min(((summary.activity?.exercise_minutes || summary.exercise.total_minutes) / summary.goals.exercise_goal) * 100, 100)}%` }}
               transition={{ type: 'spring', stiffness: 100 }}
             />
           </div>
-          <div className={`grid gap-2 text-center ${summary.activity?.active_energy ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <div className="grid grid-cols-2 gap-2 text-center">
             <div>
-              <p className="text-lg font-bold text-sage">{summary.exercise.total_minutes}</p>
+              <p className="text-lg font-bold text-sage">{summary.activity?.exercise_minutes || summary.exercise.total_minutes}</p>
               <p className="text-[10px] text-brown-light">Minutes</p>
             </div>
             <div>
-              <p className="text-lg font-bold text-terracotta">{summary.exercise.total_burned}</p>
-              <p className="text-[10px] text-brown-light">Workout Cal</p>
+              <p className="text-lg font-bold text-terracotta">{summary.activity?.active_energy || summary.exercise.total_burned}</p>
+              <p className="text-[10px] text-brown-light">Active Cal</p>
             </div>
-            {summary.activity?.active_energy != null && summary.activity.active_energy > 0 && (
-              <div>
-                <p className="text-lg font-bold text-mustard">{summary.activity.active_energy}</p>
-                <p className="text-[10px] text-brown-light">Active Cal</p>
+          </div>
+        </div>
+      )}
+
+      {/* Apple Watch Health Metrics */}
+      {summary?.activity && Object.keys(summary.activity).length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl p-4 shadow-sm mb-4"
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <Watch size={14} className="text-brown-light" />
+            <span className="text-sm font-medium text-brown">Apple Watch</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {summary.activity.step_count > 0 && (
+              <div className="bg-cream rounded-xl p-2.5 text-center">
+                <Footprints size={16} className="text-sage mx-auto mb-1" />
+                <p className="text-sm font-bold text-brown">{summary.activity.step_count.toLocaleString()}</p>
+                <p className="text-[9px] text-brown-light">steps</p>
+              </div>
+            )}
+            {summary.activity.heart_rate > 0 && (
+              <div className="bg-cream rounded-xl p-2.5 text-center">
+                <Heart size={16} className="text-terracotta mx-auto mb-1" />
+                <p className="text-sm font-bold text-brown">{Math.round(summary.activity.heart_rate)}</p>
+                <p className="text-[9px] text-brown-light">avg bpm</p>
+              </div>
+            )}
+            {summary.activity.resting_heart_rate > 0 && (
+              <div className="bg-cream rounded-xl p-2.5 text-center">
+                <Heart size={16} className="text-sage mx-auto mb-1" />
+                <p className="text-sm font-bold text-brown">{Math.round(summary.activity.resting_heart_rate)}</p>
+                <p className="text-[9px] text-brown-light">resting bpm</p>
+              </div>
+            )}
+            {summary.activity.distance > 0 && (
+              <div className="bg-cream rounded-xl p-2.5 text-center">
+                <Route size={16} className="text-mustard mx-auto mb-1" />
+                <p className="text-sm font-bold text-brown">{summary.activity.distance.toFixed(1)}</p>
+                <p className="text-[9px] text-brown-light">miles</p>
+              </div>
+            )}
+            {summary.activity.flights_climbed > 0 && (
+              <div className="bg-cream rounded-xl p-2.5 text-center">
+                <ArrowUpFromDot size={16} className="text-terracotta mx-auto mb-1" />
+                <p className="text-sm font-bold text-brown">{summary.activity.flights_climbed}</p>
+                <p className="text-[9px] text-brown-light">flights</p>
+              </div>
+            )}
+            {summary.activity.resting_energy > 0 && (
+              <div className="bg-cream rounded-xl p-2.5 text-center">
+                <Flame size={16} className="text-brown-light mx-auto mb-1" />
+                <p className="text-sm font-bold text-brown">{summary.activity.resting_energy.toLocaleString()}</p>
+                <p className="text-[9px] text-brown-light">resting cal</p>
               </div>
             )}
           </div>
-          {summary.activity?.step_count != null && summary.activity.step_count > 0 && (
-            <div className="mt-2 text-center">
-              <span className="text-xs text-brown-light">{summary.activity.step_count.toLocaleString()} steps</span>
-            </div>
-          )}
-        </div>
+        </motion.div>
       )}
 
       {/* Entries */}

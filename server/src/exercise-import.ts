@@ -269,6 +269,12 @@ export function parseHealthAutoExport(body: any): { workouts: ImportEntry[]; met
     'step_count': 'step_count',
     'stepCount': 'step_count',
     'steps': 'step_count',
+    'heart_rate': 'heart_rate',
+    'resting_heart_rate': 'resting_heart_rate',
+    'walking_running_distance': 'distance',
+    'flights_climbed': 'flights_climbed',
+    'apple_exercise_time': 'exercise_minutes',
+    'walking_speed': 'walking_speed',
   };
 
   // Metrics whose values are energy and may need kJ→kcal conversion
@@ -282,7 +288,8 @@ export function parseHealthAutoExport(body: any): { workouts: ImportEntry[]; met
     const units = m.units || '';
     const dataPoints = m.data || [m];
     for (const dp of dataPoints) {
-      let value = extractQty(dp.qty) || extractQty(dp.value) || extractQty(dp);
+      // Heart rate uses Avg/Min/Max instead of qty
+      let value = extractQty(dp.qty) || extractQty(dp.Avg) || extractQty(dp.value) || extractQty(dp);
       if (value <= 0) continue;
 
       // Convert kJ to kcal for energy metrics
@@ -292,7 +299,7 @@ export function parseHealthAutoExport(body: any): { workouts: ImportEntry[]; met
 
       metricEntries.push({
         metric: metricKey,
-        value,
+        value: Math.round(value * 100) / 100,
         date: dp.date || m.date || new Date().toISOString(),
       });
     }
